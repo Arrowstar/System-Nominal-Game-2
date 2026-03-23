@@ -8,6 +8,7 @@
  */
 import '/src/index.css';
 
+import { ActiveOrdersPanel } from './ui/ActiveOrdersPanel.js';
 import { GameLoop } from './core/GameLoop.js';
 import { InputManager } from './core/InputManager.js';
 import { StateManager, STATES } from './core/StateManager.js';
@@ -341,6 +342,7 @@ states.register(STATES.NAV, {
     const navRoot = document.getElementById('hud-root');
     this.fameBadge = new FameBadge(this.navHUD.hudManager, 'nav', 'top-center');
     this.toast     = new MilestoneToast(navRoot);
+    this.activeOrders = new ActiveOrdersPanel(this.navHUD.hudManager, solarSystem.economy);
     
     // Remount to include the new externally added panels
     this.navHUD.hudManager.mountAll();
@@ -425,6 +427,7 @@ states.register(STATES.NAV, {
 
     if (this.fameBadge) this.fameBadge.update(fameTracker);
     if (this.toast)     this.toast.tick(dt, fameTracker);
+    if (this.activeOrders) this.activeOrders.update();
 
     if (this.navHUD) this.navHUD.update(simTime, playerShip, navComp.widget.activeNode, navComp.predictedElements, navComp.selectedBody, autopilot, navComp.playerOrbitElements);
 
@@ -439,6 +442,7 @@ states.register(STATES.NAV, {
     if (this.navHUD)    { this.navHUD.destroy();    this.navHUD    = null; }
     if (this.fameBadge) { this.fameBadge.destroy(); this.fameBadge = null; }
     if (this.toast)     { this.toast.destroy();     this.toast     = null; }
+    if (this.activeOrders) { this.activeOrders.destroy(); this.activeOrders = null; }
   }
 });
 
