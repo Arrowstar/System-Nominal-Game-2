@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="System Nominal — Navigate a living solar system. Trade, fight, and plot orbital trajectories to become a legend." />
+  <title>System Nominal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;700&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/index.css" />
+</head>
+<body>
+  <!-- Primary render surface: the game world (space, orbits, ships) -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- DOM overlay layer: all HUD elements, menus, alerts sit here -->
+  <div id="hud-root"></div>
+
+  <!-- CRT visual effect overlay (scanlines, vignette) -->
+  <div id="crt-overlay" aria-hidden="true"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

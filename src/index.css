@@ -1,0 +1,323 @@
+/* ============================================================
+   SYSTEM NOMINAL — Global Stylesheet
+   Design Token: Industrial Sci-Fi / NASA-Punk
+   ============================================================ */
+
+/* --- Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;700&family=Fira+Code:wght@300;400;500&display=swap');
+
+/* --- Design Tokens --- */
+:root {
+  /* Backgrounds */
+  --color-void:        #080b0f;
+  --color-dark:        #0d1117;
+  --color-surface:     #161b22;
+  --color-surface-2:   #1c2333;
+  --color-border:      #2a3347;
+
+  /* Primary Data (CRT green) */
+  --color-primary:     #39ff14;
+  --color-primary-dim: #1a7a08;
+  --color-primary-glow: rgba(57, 255, 20, 0.25);
+
+  /* Warnings (amber) */
+  --color-warn:        #ffbf00;
+  --color-warn-dim:    #7a5a00;
+  --color-warn-glow:   rgba(255, 191, 0, 0.25);
+
+  /* Critical / Hostile (red) */
+  --color-danger:      #ff003f;
+  --color-danger-dim:  #7a001e;
+  --color-danger-glow: rgba(255, 0, 63, 0.25);
+
+  /* Info / Text */
+  --color-text:        #e6edf3;
+  --color-text-muted:  #8b949e;
+  --color-text-dim:    #484f58;
+  --color-blue:        #58a6ff;
+
+  /* Gauges */
+  --color-fuel:        #2979ff;
+  --color-power:       #ffca28;
+  --color-heat:        #ff5722;
+
+  /* Fonts */
+  --font-mono:         'Roboto Mono', 'Fira Code', 'Courier New', monospace;
+  --font-ui:           'Roboto Mono', monospace;
+
+  /* Spacing */
+  --gap-xs:   4px;
+  --gap-sm:   8px;
+  --gap-md:   16px;
+  --gap-lg:   24px;
+  --gap-xl:   40px;
+
+  /* Borders */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+}
+
+/* --- Reset --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-void);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Canvas (full viewport, behind everything) --- */
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  background: var(--color-void);
+  z-index: 0;
+}
+
+/* --- HUD Root (DOM overlay, pointer-events managed per child) --- */
+#hud-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Allow specific HUD children to capture input */
+#hud-root .interactive {
+  pointer-events: all;
+}
+
+/* --- CRT Overlay --- */
+#crt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+
+  /* Scanlines */
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+
+  /* Vignette */
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.7);
+
+  /* Chromatic aberration hint at edges */
+  border: 1px solid rgba(57, 255, 20, 0.03);
+}
+
+/* --- HUD Typography --- */
+.hud-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.hud-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.05em;
+  /* Tabular nums prevent layout jitter on fast-changing values */
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-value.warn  { color: var(--color-warn); }
+.hud-value.danger { color: var(--color-danger); }
+
+/* --- HUD Panel --- */
+.hud-panel {
+  background: rgba(13, 17, 23, 0.85);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--gap-sm) var(--gap-md);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.hud-panel-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin-bottom: var(--gap-xs);
+  border-bottom: 1px solid var(--color-primary-dim);
+  padding-bottom: var(--gap-xs);
+}
+
+/* --- Segmented Bar (Fuel/Power/Heat) --- */
+.res-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
+.res-bar__track {
+  position: relative;
+  height: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.res-bar__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.res-bar__fill.fuel  { background: var(--color-fuel); box-shadow: 0 0 6px rgba(41, 121, 255, 0.6); }
+.res-bar__fill.power { background: var(--color-power); box-shadow: 0 0 6px rgba(255, 202, 40, 0.6); }
+.res-bar__fill.heat  { background: var(--color-heat); box-shadow: 0 0 6px rgba(255, 87, 34, 0.6); }
+
+/* Shadow preview bar for maneuver node fuel cost */
+.res-bar__shadow {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  transition: left 0.15s, width 0.15s;
+}
+
+/* --- Alert Banner --- */
+.alert-banner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--gap-sm) var(--gap-lg);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  pointer-events: all;
+  border: 1px solid;
+  animation: alert-pulse 0.6s ease-in-out infinite alternate;
+}
+
+.alert-banner.warn {
+  background: var(--color-warn-glow);
+  border-color: var(--color-warn);
+  color: var(--color-warn);
+  top: var(--gap-lg);
+}
+
+.alert-banner.danger {
+  background: var(--color-danger-glow);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  top: var(--gap-lg);
+}
+
+@keyframes alert-pulse {
+  from { opacity: 0.7; }
+  to   { opacity: 1.0; box-shadow: 0 0 16px currentColor; }
+}
+
+/* --- Buttons --- */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: var(--gap-xs) var(--gap-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  cursor: pointer;
+  transition: background 0.1s, box-shadow 0.1s;
+  pointer-events: all;
+}
+
+.btn-primary {
+  background: var(--color-primary-dim);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.btn-primary:hover {
+  background: var(--color-primary);
+  color: var(--color-void);
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+.btn-warn {
+  background: var(--color-warn-dim);
+  border-color: var(--color-warn);
+  color: var(--color-warn);
+}
+.btn-warn:hover {
+  background: var(--color-warn);
+  color: var(--color-void);
+}
+
+.btn-danger {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.btn-danger:hover {
+  background: var(--color-danger);
+  color: var(--color-text);
+}
+
+/* --- Scrollbar (matching theme) --- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-surface); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-primary-dim); }
+
+/* --- Utility --- */
+.flex       { display: flex; }
+.flex-col   { display: flex; flex-direction: column; }
+.gap-xs     { gap: var(--gap-xs); }
+.gap-sm     { gap: var(--gap-sm); }
+.gap-md     { gap: var(--gap-md); }
+.items-center    { align-items: center; }
+.justify-between { justify-content: space-between; }
+.text-center     { text-align: center; }
+.text-primary    { color: var(--color-primary); }
+.text-warn       { color: var(--color-warn); }
+.text-danger     { color: var(--color-danger); }
+.text-muted      { color: var(--color-text-muted); }
+.hidden          { display: none !important; }
+
+/* --- HUD Docking Zones --- */
+.hud-zone-active {
+  background: rgba(57, 255, 20, 0.03);
+  border: 1px dashed rgba(57, 255, 20, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.hud-zone-over {
+  background: rgba(57, 255, 20, 0.1) !important;
+  border: 1px solid var(--color-primary) !important;
+}

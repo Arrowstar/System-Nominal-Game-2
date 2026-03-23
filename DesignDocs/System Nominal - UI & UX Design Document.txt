@@ -1,0 +1,76 @@
+﻿UI & UX Design Document: System Nominal
+1. UI Philosophy & Aesthetic
+* Theme: Industrial Sci-Fi, "NASA-Punk," functional, and data-rich. The interface should feel less like a magical video game overlay and more like a tactile, rugged piece of avionics software running on a hardened military-grade terminal.
+* Color Palette: * Backgrounds: Deep void blacks and dark charcoal grays to reduce eye strain.
+   * Primary Data: CRT-monitor greens (#39FF14) for stable navigation, safe orbits, and allied contacts.
+   * Warnings: High-contrast amber (#FFBF00) for thermal warnings, proximity alerts, and contraband scans.
+   * Critical/Hostile: Blistering reds (#FF003F) for hull breaches, missile locks, and hostile intercepts.
+   * Text: Sterile, crisp whites for primary readouts.
+* Typography: Strictly sans-serif and monospace fonts (e.g., Roboto Mono or Fira Code) for all dynamic numerical readouts. This ensures that rapidly changing data (like velocity or fuel reserves) doesn't "jitter" horizontally, maintaining readability during chaotic maneuvers.
+* Visual Effects (VFX): Subtle scanlines, slight chromatic aberration at the extreme edges of the screen, and occasional static "flickers" when taking heavy kinetic damage or flying too close to the electromagnetic interference of the sun, Solara.
+* Audio-Visual Synergy (UX): Every button press should have a satisfying, mechanical "clack" or "chirp." Critical warnings should be accompanied by distinct, recognizable auditory alarms (e.g., a low, rhythmic thud for bingo fuel, a piercing klaxon for missile lock) so the player can react without having to look at a specific gauge.
+2. Core Screens & States
+The game avoids jarring loading screens, striving for a cohesive captain's experience. The game is divided into three primary interface states, with seamless zoom transitions between them:
+1. The Nav-Computer (Map & Planning): A macro-view of the solar system.
+2. The Tactical Bridge (Flight & Combat HUD): The micro-view, looking out the cockpit window or via a close-up tactical sensor drone view.
+3. The Station Terminal (Trading & Upgrades): The physical interface presented when hard-docked to a station or planet.
+3. The Nav-Computer (Map View)
+This is where players spend time plotting their interplanetary journeys, viewing the N-body gravity simulation from a top-down, zoomable perspective. It resembles an air traffic controller's radar screen crossed with an astrophysics simulation.
+3.1 Visual Elements
+* The Gravity Well Grid: The background features a faint wireframe grid that physically "dips" and distorts around heavy masses like Solara and the Gas Giants. This visually communicates gravitational pull, allowing intuitive understanding of where a ship will accelerate or require more thrust.
+* Orbits & Trails: Celestial bodies leave faint, fading trails to show their movement direction and historical path. Selected targets have their future paths drawn out in solid lines.
+* The Ghost Path: A bright, dashed green line extending from the player's ship, predicting their future orbit based on current velocity and gravitational influences.
+* Data Layers (Filters): The player can toggle various overlays:
+   * Political Layer: Highlights zones of control, high-security sectors, and pirate-infested territories.
+   * Economic Layer: Visualizes major trade routes with faint animated lines showing the flow of NPC merchant traffic.
+3.2 Interaction: Maneuver Nodes & Time-Warp
+* Creating a Node: Clicking anywhere on the player's Ghost Path creates a Maneuver Node.
+* Vector Manipulation: A widget appears with arrows representing orbital vectors: Prograde (forward/speed up), Retrograde (backward/slow down), Radial In/Out (left/right towards or away from the nearest gravity well), and Normal/Anti-Normal (up/down orbital inclination).
+* Fine-Tuning: Because mouse dragging can be imprecise for orbital mechanics, hovering over a vector arrow allows the player to use the mouse scroll wheel to dial in the thrust with micro-precision. Dragging these arrows changes the Ghost Path to show the new predicted orbit if that burn is executed.
+* Data Readout: A dedicated panel snaps to the side, showing the estimated Fuel Cost, Burn Duration, and required $\Delta v$ (Delta-V). It also displays a countdown timer: Time to Burn (T-Minus).
+* Time-Warp Control: Essential for orbital travel, a prominent dial at the top of the screen allows the player to accelerate time (1x, 10x, 100x, 1000x) while coasting, automatically reverting to 1x speed when a Maneuver Node approaches or an emergency occurs.
+4. The Tactical Bridge (Flight & Combat HUD)
+When unpaused or when the player is executing a burn, fighting, or docking, the view shifts to the ship-centric Tactical Bridge. This view is cluttered but highly organized, prioritizing immediate survival data.
+4.1 Central Reticle, Vectors & Sensors
+* Crosshair: Fixed to the center of the screen, aiming the ship's nose and fixed weapons.
+* Vector Markers: Diegetic icons floating in space around the ship:
+   * Prograde Marker (Circle with lines): The exact direction you are currently moving.
+   * Retrograde Marker (Circle with an X): The exact opposite of your movement. Pointing here and thrusting acts as your "brakes."
+* Edge Radar/Minimap: Instead of a separate minimap, off-screen ships and planets are represented by small arrows on the very edge of the screen, colored by disposition (Green: Friendly, White: Neutral, Red: Hostile), growing larger as the entity gets closer.
+* Target Lock: A dynamic bracket around a locked target. Next to the bracket is a floating data block showing target distance, hull classification, shield status, and crucial relative velocity ($V_{rel}$) compared to the player.
+4.2 The "Pursuit Assist" Widget
+* Located prominently near the central crosshair.
+* Status Indication: Displays "MANUAL FLIGHT" (subdued grey/amber) or "ASSIST ACTIVE" (pulsing bright green). When engaged, UI crosshairs aggressively snap to the target, and maneuvering thrusters visibly fire on the player's ship model.
+* Fuel Drain Indicator: When active, a rapidly ticking digital counter shows how much fuel is being burned per second to maintain the relative-frame arcade pocket, warning the player of the immense cost of dogfighting in deep space.
+4.3 Ship Systems Dashboard (Bottom/Corners)
+* Thrust & Acceleration Gauge: A bar showing current Engine Output ($F$) in kilonewtons, and actual resulting Acceleration ($a$) in G-forces. This dynamically shifts based on the ship's current mass. Sustained high-G maneuvers will cause the UI to slightly blur, simulating pilot blackout/redout.
+* The Tri-Bar Resource Monitor:
+   * Fuel (Blue): A thick, segmented bar. Depletes rapidly during main engine burns. A secondary "shadow" bar previews how much fuel the currently plotted Maneuver Node will consume.
+   * Power (Yellow): Depletes when firing energy lasers or taking shield hits; regenerates based on the installed reactor or solar panels. Includes a sub-menu to route power (e.g., divert power from engines to reinforce forward shields).
+   * Heat (Red): Fills up during intense combat, continuous burns, or proximity to Solara. If it reaches 100%, warning klaxons sound, the UI border flashes red, and modules begin taking catastrophic thermal damage.
+* Hull Integrity: A simplified top-down wireframe of the player's specific ship hull. Sections (Front, Port, Starboard, Aft) glow progressively from yellow to red as armor is stripped and underlying structure takes damage.
+5. The Station Terminal (Docked UI)
+When docked at a station, planet, or moon, the view shifts to a sterile, menu-driven interface resembling an industrial operating system. Background ambient audio changes to the muffled sounds of a busy spaceport (loading cranes, distant announcements, hissing pneumatics).
+5.1 The Local Market (Trading)
+* Split Screen: Station Inventory and demanded goods on the left, Player Cargo Hold on the right.
+* Commodity Rows & Analytics: Each item (e.g., Iron Ore, Medical Supplies) shows:
+   * Current Price per metric ton.
+   * Market Trends: A small sparkline graph next to the price shows the 7-day price history, helping players identify temporary crashes or booms.
+   * Supply/Demand Indicators: Green/Red arrows showing if the local price is above or below the systemic average.
+   * Legality: Contraband items are highlighted in flashing amber, with a warning icon detailing the local fine if caught holding it in orbit.
+* One-Click Actions: Streamlined buttons for "Sell All Unlocked," "Fill Hold," and "Refuel to Max," accompanied by satisfying cash-register audio cues.
+5.2 The Shipyard (Upgrades & Hulls)
+* The Blueprint View: The player's hull is displayed as an interactive top-down blueprint grid.
+* Slotting System: * Small (S), Medium (M), and Large (L) slots are visibly outlined with distinct geometry (e.g., circles for utility, squares for weapons, hexagons for internal modules).
+   * Components in the station inventory can be dragged and dropped into slots like a puzzle. Incompatible slots are grayed out.
+* Dynamic Stat Calculation: A vertical sidebar on the right instantly recalculates ship metrics. As the player drops a massive 'Cryo-Cistern' into a Large slot, the sidebar visually flashes green for the positive impact on Total Range, and flashes red to show the severe negative impact on the ship's Base Acceleration and Turn Rate.
+5.3 The Mission Board & Fame Tracker
+* Mission Board: Divided into tabs: Available, Active, Completed. Contracts detail the payout, danger level, target destination, and employer faction. High-danger missions feature red warning stamps.
+* The Galactic Ledger (Fame): A persistent, stylized tab showing the player's current Fame Points (x/20), represented as a stylized medal or rank insignia that grows more elaborate. Hovering over it reveals a scrollable checklist of Milestones (e.g., "Gravity Master: Incomplete," "Ace: Complete"), acting as the player's primary progression roadmap.
+6. HUD Alerts & Feedback
+Information triage is critical. Alerts are categorized by severity, interrupting the player's focus only when absolutely necessary.
+* Proximity Warnings (Amber to Red): Flashing UI elements and auditory "pull up" style alarms occur when on a collision course with a high-mass body or asteroid. The time-to-impact is displayed in the center of the screen.
+* "Bingo Fuel" (Amber): A specialized, vital alert. Triggered when the Nav-Computer calculates that performing a manually plotted maneuver will leave the ship with insufficient fuel to achieve a stable orbit or reach the nearest known refuelling station. Requires a manual override click to execute the doomed burn.
+* Contraband Scan (Amber): A tense, filling progress bar that appears when local Patrols ping the ship with sensors. The player has a frantic 5-to-10 second window to interact with a popup to "Dump Cargo," "Engage Pursuit Assist to Fight," or "Engage Main Thrusters to Flee" before the fine and Fame penalty are applied.
+* Missile Lock (Red): A classic, escalating high-pitched beep that turns into a solid tone when an enemy torpedo has successfully matched the player's orbital trajectory. Accompanied by a bold red directional arrow pointing toward the incoming threat.
+* Communications/Hails (White/Blue): A small, non-intrusive text log in the upper left corner where NPC merchants broadcast trade offers, pirates demand cargo, or station traffic control grants docking permission.

@@ -1,0 +1,146 @@
+﻿Game Design Document: System Nominal (Working Title)
+1. Overview
+Logline: Assume the captain's chair in a living, dynamic solar system governed by N-body gravity. Trade, fight, and navigate complex orbital paths to earn enough Fame to become a legend before your fuel—or your luck—runs out.
+Genre: Orbital Physics RPG / Sandbox / Trading Simulator
+Inspirations: Xia: Legends of a Drift System, Kerbal Space Program, The Expanse
+Theme: Hard Sci-fi, Frontier Capitalism, Gravitational Mastery
+2. Core Gameplay Loop
+1. Plot & Burn: Players use a Nav-Computer to plot trajectories between moving bodies. Navigation requires timed burns to alter orbits while balancing acceleration ($a$) against current ship mass ($m$) and fuel.
+2. Execute: Transition to a tactical bridge view to execute maneuvers. Dock with rotating stations, mine asteroids, or engage in "Relative-Frame" combat.
+3. Earn & Upgrade: Convert cargo and bounties into credits. Install more efficient engines, larger fuel tanks, or high-output reactors to handle more demanding orbits.
+4. Ascend: Accumulate 20 Fame Points through legendary deeds to win.
+3. Win & Loss Conditions
+* Victory: Reach the 20 Fame threshold to enter the "Legacy" screen, summarizing your career.
+* Defeat: * Hull Breach: Integrity reaches zero from combat or collision.
+   * The Dead Orbit: Running out of fuel with no intersecting path to a station.
+   * Rescue: Broadcast a "Mayday" to be towed to the nearest station at the cost of 75% credits and 2 Fame.
+4. Physics: The $F = ma$ Engine
+The game operates on a persistent Newtonian simulation where momentum is never lost to "friction."
+* N-Body Gravity: All 10 planets, their moons, and the Sun (Solara) exert gravitational pull on the ship simultaneously.
+* Variable Acceleration: As fuel is consumed, the ship’s mass decreases, making the same thrust ($F$) produce higher acceleration ($a$).
+* The Sun (Solara): The dominant gravity well. It enables the Oberth Effect, where burns performed deep in the Sun's well are significantly more efficient for high-velocity travel.
+* Trajectory Prediction: The HUD renders "Ghost Paths"—dynamic orbital projections that shift in real-time as the player applies thrust.
+5. Ship Customization & Components
+5.1 Hulls & Base Mass
+Mass determines how much fuel is needed for a specific maneuver. Heavier hulls are tougher but "thirstier."
+
+
+Hull Name
+	Tier
+	Base Mass
+	Integrity
+	Slots (S/M/L)
+	Description
+	Wayfarer
+	1
+	100t
+	100
+	3 / 1 / 0
+	Balanced starter ship.
+	Dart
+	1
+	40t
+	80
+	2 / 0 / 0
+	Ultralight racer; massive $a$ potential.
+	Ox
+	1
+	250t
+	150
+	1 / 2 / 0
+	Heavy industrial frame for bulk hauling.
+	Bastion
+	3
+	1000t
+	900
+	4 / 4 / 1
+	Dreadnought-class fortress.
+	Leviathan
+	3
+	1500t
+	800
+	2 / 3 / 4
+	Peak engineering for massive components.
+	5.2 Propulsion (Engines)
+Total Thrust is the sum of all active engines. Isp dictates fuel efficiency.
+Component
+	Slot
+	Thrust
+	Isp
+	Notes
+	Mono-Prop RCS
+	S
+	50
+	Low
+	Essential for docking and rotation.
+	Kerosene Rocket
+	S
+	500
+	Med
+	High raw power; high fuel consumption.
+	Nuclear Engine
+	M
+	1500
+	High
+	Reliable interplanetary standard.
+	Plasma Torch
+	L
+	6000
+	Max
+	Constant-thrust "Brachistochrone" capable.
+	6. The Solara System Layout
+6.1 Inner Zone (Rocky/High-Security)
+* Solara: The central star. Source of gravity and solar radiation.
+* Ignis: Tidally locked cinder. Produces Rare Metals. Extreme heat hazard.
+* The Foundry: Industrial hub. Produces Machinery.
+* Aethelgard: Capital world. High demand for Luxuries. Home to the Vane shipyard.
+* Gaea Prime: Terraformed garden. Produces Food Paks and Medicine.
+6.2 The Belt of Tears
+* A massive ring of asteroids between the Inner and Outer zones. Home to Ceres Prime (Trade Hub) and pirate hideouts.
+6.3 Outer Zone (Gas Giants/Frontier)
+* Kronos: Primary source of Helium-3 (Fuel). Moons: Hyperion (Agri) and Atlas (Refinery).
+* Oceanus: Ice giant. Produces Water/Oxygen. Moon: Triton (Military).
+* Erebus: Stormy giant. Produces Advanced Electronics. Moon: Nyx (Black Market).
+* Caelus: Ringed ice giant. Source of Rare Crystals. Moon: Ariel (Science).
+* Tartarus: Dwarf planet on an eccentric orbit. Source of Illegal Stims.
+* Solara-B: Brown dwarf at the edge. Home to the Void-Gate derelict.
+7. Combat & Flight Assist (Arcade Style)
+To bridge the gap between "Hard Physics" and "Fun Gameplay," the ship features a Combat Flight Computer.
+7.1 Pursuit Assist (The Arcade Toggle)
+When a target is locked, the ship enters Relative Frame Mode:
+* Velocity Matching: The computer automatically burns thrusters to match the target's orbital velocity. This makes the enemy appear "still" or "dogfightable" relative to the player.
+* The Cost: Maintaining this "Arcade Pocket" consumes fuel constantly. Fighting a ship in a wildly different orbit (e.g., trying to intercept a moon-bound ship while in a solar orbit) will drain tanks rapidly.
+* Point-and-Shoot: While Assist is active, WASD controls provide intuitive "arcade" movement (strafe, forward, back) relative to the target.
+7.2 Tactical Weaponry
+* Auto-Cannons (Kinetic): Projectiles inherit the ship's velocity. Best for "jousting" passes.
+* Pulse Lasers (Energy): Hit-scan at close range. Drains ship Power and generates Heat.
+* Torpedoes: Self-propelled AI craft that use their own $F=ma$ logic to intercept the enemy's path.
+8. Tactical Systems: Heat & Power
+* Heat: Engines and weapons generate thermal energy. If not dissipated via Radiators, the ship takes hull damage. Proximity to Solara increases passive heat gain.
+* Power: Reactors provide the energy for Ion engines and Shields. Solar Panels are effective in the Inner Zone but become useless beyond the Belt.
+9. Fame Point Milestones
+Category
+	Task
+	Fame
+	Navigator
+	Chain 3 gravity assists in a single trip.
+	+3
+	Ace
+	Destroy 3 ships in a single "Pursuit Assist" window.
+	+2
+	Tycoon
+	Profit 50,000 Credits from trading.
+	+2
+	Icarus
+	Perform a burn within the Sun's "Danger Zone."
+	+2
+	Pioneer
+	Dock with the Void-Gate at the system edge.
+	+4
+	10. MVP Milestones
+1. Orbital Core: N-body gravity and $F=ma$ movement.
+2. Nav-HUD: Ghost Path prediction and maneuver nodes.
+3. Pursuit Assist: Implement the relative-velocity "Arcade" toggle.
+4. The System: Solara + 10 Planets and Moon systems.
+5. Economy: Docking, trading, and component swapping.
+6. Fame: Milestone tracking and Victory state.
