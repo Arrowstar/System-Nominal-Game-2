@@ -1,18 +1,23 @@
 /**
  * AutopilotManager.js — Constant-thrust autopilot for intercepting celestial bodies.
  *
- * Implements a four-phase guidance law:
+ * Implements a five-phase guidance law:
  *   Phase 1: ALIGN   — Rotate to face the computed intercept heading
- *   Phase 2: ACCEL   — Full thrust toward predicted intercept point
- *   Phase 3: BRAKE   — Full thrust retrograde to relative velocity, matching orbital speed
- *   Phase 4: HOLD    — Arrived in orbit — station-keeping
+ *   Phase 2: ACCEL   — Thrust toward predicted intercept point
+ *   Phase 3: COAST   — Engines off, unpowered drift toward target (fuel-saving)
+ *   Phase 4: BRAKE   — Full thrust retrograde to relative velocity, matching orbital speed
+ *   Phase 5: HOLD    — Arrived in orbit — station-keeping
+ *
+ * Efficiency slider (0–1) controls the coast phase:
+ *   - 0 = max speed: no coasting, full burn the whole way (classic behavior)
+ *   - 1 = max economy: brief burn, long unpowered coast, save ~60-80% fuel
  *
  * Features:
  *   - Gravity-aware braking distance (accounts for target body's pull)
  *   - Orbital insertion targeting (aims for 2× body radius orbit)
  *   - Collision avoidance (steers around the sun and other massive bodies)
  *
- * The transition from ACCEL → BRAKE is based on stopping-distance estimation:
+ * The transition from ACCEL → COAST/BRAKE is based on stopping-distance estimation:
  *   v²_rel / (2 × effective_decel) ≥ distance_to_target
  *   where effective_decel = max_thrust_accel - gravitational_accel_along_LOS
  *
@@ -33,6 +38,7 @@ export const AP_STATE = {
   OFF:    'OFF',
   ALIGN:  'ALIGN',
   ACCEL:  'ACCEL',
+  COAST:  'COAST',   // Unpowered drift — fuel-saving cruise
   BRAKE:  'BRAKE',
   HOLD:   'HOLD',    // Arrived — station-keeping
 };
@@ -74,6 +80,11 @@ export class AutopilotManager {
     this.dvRemaining = 0;      // Estimated remaining Δv needed (m/s)
     this.closestApproach = Infinity;
     this._lastSolveTime = 0;
+
+    // Efficiency slider: 0 = max speed (no coast), 1 = max economy (long coast)
+    this.efficiency      = 0;
+    this.estimatedFuelCost = 0;  // Rough fuel estimate (kg) for remaining ΔV
+    this._shipRef = null;        // Cached ship reference for fuel estimation
   }
 
   /** Is the autopilot active? */
@@ -90,6 +101,7 @@ export class AutopilotManager {
     this.eta = 0;
     this.closestApproach = Infinity;
     this._lastSolveTime = 0;
+    this.estimatedFuelCost = 0;
   }
 
   /** Disengage autopilot entirely. */
@@ -100,6 +112,16 @@ export class AutopilotManager {
     this.eta = 0;
     this.dvRemaining = 0;
     this.closestApproach = Infinity;
+    this.estimatedFuelCost = 0;
+    this._shipRef = null;
+  }
+
+  /**
+   * Set autopilot efficiency.
+   * @param {number} value  0 = max speed (no coast), 1 = max economy (long coast)
+   */
+  setEfficiency(value) {
+    this.efficiency = Math.max(0, Math.min(1, value));
   }
 
   /**
@@ -113,6 +135,9 @@ export class AutopilotManager {
    */
   update(ship, dt, simTime, timeWarp = null) {
     if (this.state === AP_STATE.OFF || !this.targetBody) return;
+
+    // Cache ship reference for fuel estimation
+    this._shipRef = ship;
 
     // Failsafe: if we run out of fuel during an autopilot burn, 
     // immediately drop warp and disengage to prevent overshooting into deep space.
@@ -184,6 +209,17 @@ export class AutopilotManager {
     const turnaroundDist = (relSpeed + gravAccelLOS * turnaroundTime * 0.5) * turnaroundTime;
     const stoppingDist = ((relSpeed * relSpeed) / (2 * effectiveDecel) + turnaroundDist) * BRAKE_SAFETY;
 
+    // ── Coast speed target ───────────────────────────────────────────────
+    // efficiency=0 → coastFraction=1.0 → never coast (full burn)
+    // efficiency=1 → coastFraction=0.08 → coast at 8% of max speed
+    const coastFraction = Math.max(0.08, 1.0 - this.efficiency);
+    // Max possible closing speed if we burned the whole way (rough estimate)
+    const maxCoastSpeed = Math.sqrt(2 * maxAccel * Math.max(1, dist));
+    const targetCoastSpeed = maxCoastSpeed * coastFraction;
+
+    // ── Update fuel cost estimate ────────────────────────────────────────
+    this._updateFuelEstimate(ship, relSpeed);
+
     // ── Auto Time-Warp Cancellation ──────────────────────────────────────
     if (timeWarp && timeWarp.factor > 1) {
       if (this.state === AP_STATE.ALIGN) {
@@ -192,10 +228,22 @@ export class AutopilotManager {
         const closingSpeed = Math.max(1, relVel.dot(relPos.norm().neg()));
         
         if (this.state === AP_STATE.ACCEL) {
-          const timeToBrake = (dist - stoppingDist) / closingSpeed;
-          // If we will hit the braking point within 2 real-time seconds assuming current warp
-          if (timeToBrake < 2 * timeWarp.factor) timeWarp.cancel();
+          // Check if we're about to reach coast speed or braking point
+          const useCoast = this.efficiency > 0.01;
+          if (useCoast) {
+            const speedToCoast = targetCoastSpeed - relSpeed;
+            const timeToCoast = speedToCoast > 0 ? speedToCoast / maxAccel : 0;
+            if (timeToCoast < 2 * timeWarp.factor) timeWarp.cancel();
+          } else {
+            const timeToBrake = (dist - stoppingDist) / closingSpeed;
+            if (timeToBrake < 2 * timeWarp.factor) timeWarp.cancel();
+          }
         } 
+        else if (this.state === AP_STATE.COAST) {
+          // Drop warp when approaching braking point
+          const timeToBrake = (dist - stoppingDist) / closingSpeed;
+          if (timeToBrake < 2 * timeWarp.factor) timeWarp.cancel();
+        }
         else if (this.state === AP_STATE.BRAKE) {
           const timeToArrival = dist / closingSpeed;
           // If we will arrive within 2 real-time seconds, or if simply very close
@@ -231,10 +279,18 @@ export class AutopilotManager {
         this.targetAimPt = ship.position.add(desiredAccel.norm().scale(dist)); // Debug
         const desiredAngle = Math.atan2(desiredAccel.y, desiredAccel.x);
 
-        // Should we start braking?
+        // Should we start braking? (always check this first, regardless of coast)
         if (stoppingDist >= dist && relSpeed > 10) {
           this.state = AP_STATE.BRAKE;
           break;  // Fall through to brake on next tick
+        }
+
+        // Should we start coasting? (only if efficiency > 0)
+        const closingRate = relVel.dot(losDir);
+        if (this.efficiency > 0.01 && this.state === AP_STATE.ACCEL && closingRate >= targetCoastSpeed) {
+          this.state = AP_STATE.COAST;
+          ship.throttle = 0;
+          break;
         }
 
         // Steer toward desired heading
@@ -257,6 +313,44 @@ export class AutopilotManager {
           ship.throttle = 1;
         }
 
+        this.dvRemaining = relSpeed;
+        break;
+      }
+
+      case AP_STATE.COAST: {
+        // ── Unpowered cruise — engines off, maintain heading toward intercept ──
+        ship.throttle = 0;
+
+        const aimPt = this.interceptPt || tPos;
+        const los = aimPt.sub(ship.position);
+        const losDir = los.norm();
+        const desiredAngle = Math.atan2(losDir.y, losDir.x);
+
+        // Keep rotating toward intercept (prep for braking orientation)
+        const angleDiff = this._normalizeAngle(desiredAngle - ship.heading);
+        if (Math.abs(angleDiff) > ALIGN_TOLERANCE) {
+          const rotDir = angleDiff > 0 ? 1 : -1;
+          ship.heading += rotDir * Math.min(AP_ROT_SPEED * dt, Math.abs(angleDiff));
+          ship.heading = this._normalizeAngle(ship.heading);
+        }
+
+        // Transition to BRAKE when stopping distance reaches remaining distance
+        if (stoppingDist >= dist && relSpeed > 10) {
+          this.state = AP_STATE.BRAKE;
+          break;
+        }
+
+        // If we've somehow slowed down too much (e.g. gravity pulled us off course),
+        // go back to ACCEL
+        const closingRate = relVel.dot(losDir);
+        if (closingRate < targetCoastSpeed * 0.5 && dist > arrivalDist * 3) {
+          this.state = AP_STATE.ACCEL;
+          break;
+        }
+
+        // ETA during coast = distance / closing speed
+        const coastClosingSpeed = Math.max(1, closingRate);
+        this.eta = dist / coastClosingSpeed;
         this.dvRemaining = relSpeed;
         break;
       }
@@ -328,6 +422,11 @@ export class AutopilotManager {
     const body = this.targetBody;
     const maxAccel = ship.totalMass > 0 ? ship.thrust / ship.totalMass : 1;
 
+    // During coast phase, use reduced effective accel for ETA calculation
+    // to account for the unpowered drift segment
+    const isCoasting = this.state === AP_STATE.COAST;
+    const effectiveAccel = isCoasting ? maxAccel * 0.5 : maxAccel;
+
     let tGuess = this.eta || 1; // start with existing ETA if available
 
     // Iterate: refine time estimate by checking intercept distance
@@ -340,29 +439,29 @@ export class AutopilotManager {
       const closingRate = relVel.dot(futurePos.sub(ship.position).norm());
       
       let newT;
-      if (closingRate > 0) {
+      if (isCoasting && closingRate > 0) {
+        // Coast ETA: time = distance / closing speed + braking time
+        const brakingTime = closingRate / maxAccel;
         const brakingDist = 0.5 * closingRate * closingRate / maxAccel;
+        const coastDist = Math.max(0, futureDist - brakingDist);
+        newT = (coastDist / closingRate) + brakingTime;
+      } else if (closingRate > 0) {
+        const brakingDist = 0.5 * closingRate * closingRate / effectiveAccel;
         if (brakingDist > futureDist) {
-          // Overshoot unavoidable, or we are in final braking phase.
-          // Time to hit target while braking at maxAccel:
-          // 0.5*a*T^2 - v0*T + d = 0  =>  T = (v0 - sqrt(v0^2 - 2ad)) / a
-          const disc = closingRate * closingRate - 2 * maxAccel * futureDist;
+          const disc = closingRate * closingRate - 2 * effectiveAccel * futureDist;
           if (disc >= 0) {
-            newT = (closingRate - Math.sqrt(disc)) / maxAccel;
+            newT = (closingRate - Math.sqrt(disc)) / effectiveAccel;
           } else {
-            newT = futureDist / closingRate; // Fallback
+            newT = futureDist / closingRate;
           }
         } else {
-          // Standard flip-and-burn from current velocity to zero relative velocity at target
-          // T = sqrt(2*v₀²/a² + 4d/a) - v₀/a
-          newT = Math.sqrt(2 * closingRate * closingRate / (maxAccel * maxAccel) + 4 * futureDist / maxAccel) - closingRate / maxAccel;
+          newT = Math.sqrt(2 * closingRate * closingRate / (effectiveAccel * effectiveAccel) + 4 * futureDist / effectiveAccel) - closingRate / effectiveAccel;
         }
       } else {
-        // Separating. Time to kill separation + time to flip-and-burn back from new distance
         const v0 = Math.abs(closingRate);
-        const stopTime = v0 / maxAccel;
-        const extraDist = 0.5 * v0 * v0 / maxAccel;
-        newT = stopTime + 2 * Math.sqrt((futureDist + extraDist) / maxAccel);
+        const stopTime = v0 / effectiveAccel;
+        const extraDist = 0.5 * v0 * v0 / effectiveAccel;
+        newT = stopTime + 2 * Math.sqrt((futureDist + extraDist) / effectiveAccel);
       }
 
       // Blend heavily to ensure convergence and prevent wild oscillation
@@ -372,6 +471,26 @@ export class AutopilotManager {
 
     this.interceptPt = this._getBodyPos(body, simTime + tGuess);
     this.eta = tGuess;
+  }
+
+  // ─── Fuel Estimation ──────────────────────────────────────────────────────
+
+  /**
+   * Estimate fuel cost for remaining ΔV using Tsiolkovsky rocket equation.
+   * Δm = m₀ × (1 − e^(−Δv / (Isp × g₀)))
+   */
+  _updateFuelEstimate(ship, dvRemaining) {
+    const g0 = 9.80665;
+    const isp = ship.isp;
+    if (isp <= 0 || dvRemaining <= 0) {
+      this.estimatedFuelCost = 0;
+      return;
+    }
+    // For coast trajectories, ΔV is roughly: accel burn + braking burn
+    // With coast, the ΔV is approximately 2 × coast_speed (burn up, then burn down)
+    const totalDv = dvRemaining * 2;  // Rough: need to brake the speed we've built up
+    const massRatio = 1 - Math.exp(-totalDv / (isp * g0));
+    this.estimatedFuelCost = Math.max(0, ship.totalMass * massRatio);
   }
 
   // ─── Gravity-Aware Braking ────────────────────────────────────────────────

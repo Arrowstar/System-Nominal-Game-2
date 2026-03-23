@@ -60,6 +60,11 @@ export class OrderBoardUI {
     update() {
         if (!this.visible) return;
         
+        // Prevent re-rendering if user is currently typing in an input
+        if (this.listEl && this.listEl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') {
+            return;
+        }
+        
         // Update UI every 500ms real-time so it's smooth but not heavy
         const now = performance.now();
         if (now - this.lastUpdate > 500) {
@@ -77,6 +82,14 @@ export class OrderBoardUI {
 
     render() {
         if (!this.solarSystem.economy) return;
+        
+        // Capture existing inputs before re-rendering
+        const inputs = {};
+        if (this.listEl) {
+            this.listEl.querySelectorAll('input[type="number"]').forEach(input => {
+                inputs[input.id] = input.value;
+            });
+        }
         
         const board = this.solarSystem.economy.orderBoard;
         // Show OPEN and ACCEPTED orders
@@ -143,6 +156,9 @@ export class OrderBoardUI {
                 if (sellers.length === 0) {
                     sellerRows = `<div style="padding: 10px; color:#8b949e; font-style:italic;">No known suppliers currently producing this.</div>`;
                 }
+
+                const bestPrice = sellers.length > 0 ? sellers[0].price : 0;
+                const savedVal = inputs[`claim-amount-${o.id}`] || o.amount;
                 
                 expandedHtml = `
                 <tr>
@@ -154,8 +170,21 @@ export class OrderBoardUI {
                             </div>
                             ${o.status === 'OPEN' ? `
                             <div style="margin-left: 20px; padding: 10px; border-left: 1px solid rgba(57,255,20,0.2);">
+                                <div style="margin-bottom: 10px;">
+                                    <label style="display:block; font-size: 10px; color:#8b949e; margin-bottom: 4px;">CLAIM AMOUNT</label>
+                                    <input type="number" id="claim-amount-${o.id}" value="${savedVal}" max="${o.amount}" min="1" 
+                                        style="background:transparent; border: 1px solid #39ff14; color:#fff; width: 80px; padding: 4px;"
+                                        oninput="
+                                            const val = Math.min(this.value, ${o.amount});
+                                            document.getElementById('cost-est-${o.id}').innerText = (val * ${bestPrice}).toLocaleString();
+                                        "
+                                    >
+                                </div>
+                                <div style="font-size: 12px; margin-bottom: 10px; color:#8b949e;">
+                                    Est. Cost: <span id="cost-est-${o.id}" style="color:#39ff14">${(savedVal * bestPrice).toLocaleString()}</span> c
+                                </div>
                                 <button 
-                                    onclick="event.stopPropagation(); window.orderBoardAcceptJob('${o.id}')"
+                                    onclick="event.stopPropagation(); const amount = parseInt(document.getElementById('claim-amount-${o.id}').value); window.orderBoardAcceptJob('${o.id}', amount)"
                                     style="background: #39ff14; color: #080b0f; border: none; padding: 10px 20px; cursor: pointer; font-family: 'Roboto Mono', monospace; font-weight: bold; border-radius: 2px; box-shadow: 0 0 10px rgba(57,255,20,0.4);"
                                     onmouseover="this.style.boxShadow='0 0 20px rgba(57,255,20,0.7)'"
                                     onmouseout="this.style.boxShadow='0 0 10px rgba(57,255,20,0.4)'"

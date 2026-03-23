@@ -90,8 +90,9 @@ const autopilot = new AutopilotManager(solarSystem);
 const economy = new EconomyEngine(solarSystem);
 
 // ─── Progression Systems ───────────────────────────────────────────────────
-const fameTracker = new FameTracker();
+import { playerWallet } from './core/Wallet.js';
 const winLoss     = new WinLoss();
+const fameTracker = new FameTracker();
 const galacticLedger = new GalacticLedger(document.getElementById('hud-root'));
 
 // Career stats for end-screens
@@ -107,8 +108,7 @@ const npcShips = [];
 
 window.solarSystem = solarSystem;
 window.playerShip = playerShip;
-window.fameTracker = fameTracker;
-window._credits = 75000; // Initialize credits globally
+window.playerWallet = playerWallet;
 
 
 // ─── HUD Root ──────────────────────────────────────────────────────────────
@@ -123,10 +123,24 @@ window.orderBoardToggleExpand = (id) => {
     orderBoardUI.render();
 };
 
-window.orderBoardAcceptJob = (id) => {
+window.orderBoardAcceptJob = (id, amount) => {
     const board = solarSystem.economy.orderBoard;
-    if (board.acceptOrder(id, 'YOU')) {
-        console.log('Contract Claimed:', id);
+    const order = board.orders.find(o => o.id === id);
+    
+    if (!order) return;
+
+    let targetOrderId = id;
+
+    // Split order if partial amount requested
+    if (amount && amount < order.amount) {
+        const newOrder = board.splitOrder(id, amount);
+        if (newOrder) {
+            targetOrderId = newOrder.id;
+        }
+    }
+
+    if (board.acceptOrder(targetOrderId, 'YOU')) {
+        console.log('Contract Claimed:', targetOrderId);
         orderBoardUI.render();
     }
 };
@@ -156,7 +170,7 @@ window.orderBoardFulfillJob = (id) => {
     if (cargo && cargo.amount >= order.amount) {
         // Fulfill!
         const earnings = order.priceOffered * order.amount;
-        window._credits += earnings;
+        playerWallet.add(earnings);
         // Track trade profit for fame (use full earnings as simple proxy)
         window.recordTradeSale(earnings, order.commodityId, order.consumer?.name);
         cargo.amount -= order.amount;
@@ -792,7 +806,7 @@ states.register(STATES.GAMEOVER, {
       careerStats,
       canMayDay ? () => {
         // Mayday: deduct credits/fame, refuel ship, and send back to flight
-        const { creditsLost } = WinLoss.executeMayday(fameTracker, window);
+        const { creditsLost } = WinLoss.executeMayday(fameTracker);
         console.log(`Mayday executed: lost ${creditsLost} credits, −2 fame.`);
         // Give ship minimal fuel to move
         playerShip.fuel = playerShip.maxFuel * 0.1;
@@ -810,7 +824,7 @@ states.register(STATES.GAMEOVER, {
         careerStats.creditsEarned = 0;
         careerStats.stationsDocked = 0;
         careerStats.simTime = 0;
-        window._credits = 75000;
+        playerWallet.credits = 75000;
         states.transition(STATES.MENU);
       }
     );
@@ -844,7 +858,7 @@ states.register(STATES.VICTORY, {
         careerStats.creditsEarned = 0;
         careerStats.stationsDocked = 0;
         careerStats.simTime = 0;
-        window._credits = 5000;
+        playerWallet.credits = 5000;
         states.transition(STATES.MENU);
       }
     );

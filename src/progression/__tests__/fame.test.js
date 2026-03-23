@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FameTracker, MILESTONES } from '../FameTracker.js';
 import { WinLoss } from '../WinLoss.js';
+import { playerWallet } from '../../core/Wallet.js';
 
 // ─── FameTracker Tests ───────────────────────────────────────────────────────
 
@@ -371,19 +372,19 @@ describe('WinLoss', () => {
 
   it('executeMayday deducts 75% credits and applies -2 fame penalty', () => {
     ft.fame = 5;
-    const globals = { _credits: 10000 };
-    const result  = WinLoss.executeMayday(ft, globals);
+    playerWallet.credits = 10000;
+    const result = WinLoss.executeMayday(ft);
 
     expect(result.creditsLost).toBe(7500);
-    expect(globals._credits).toBe(2500);
+    expect(playerWallet.credits).toBe(2500);
     expect(ft.fame).toBe(3); // 5 - 2
   });
 
   it('executeMayday with 0 credits loses 0 and penalties fame still', () => {
     ft.fame = 5;
-    const globals = { _credits: 0 };
-    WinLoss.executeMayday(ft, globals);
-    expect(globals._credits).toBe(0);
+    playerWallet.credits = 0;
+    WinLoss.executeMayday(ft);
+    expect(playerWallet.credits).toBe(0);
     expect(ft.fame).toBe(3);
   });
 });

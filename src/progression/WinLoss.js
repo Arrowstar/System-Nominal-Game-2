@@ -14,6 +14,7 @@
 
 import { Vec2 } from '../core/Vec2.js';
 import { AU }   from '../world/SolarSystem.js';
+import { playerWallet } from '../core/Wallet.js';
 
 /** Distance threshold within which a station is "reachable" for Dead Orbit check. */
 const DEAD_ORBIT_RADIUS = 5 * AU;
@@ -127,16 +128,14 @@ export class WinLoss {
   }
 
   /**
-   * Apply the Mayday penalty. Caller is responsible for resetting ship state
-   * and transitioning back to the flight state.
+   * Apply the Mayday penalty.
    *
    * @param {FameTracker} fameTracker
-   * @param {object}      globals     { _credits: number } (window globals)
    * @returns {{ creditsLost: number }} Summary of what was deducted
    */
-  static executeMayday(fameTracker, globals) {
-    const creditsLost = Math.floor((globals._credits ?? 0) * 0.75);
-    globals._credits  = (globals._credits ?? 0) - creditsLost;
+  static executeMayday(fameTracker) {
+    const creditsLost = Math.floor(playerWallet.credits * 0.75);
+    playerWallet.credits -= creditsLost;
     fameTracker.applyPenalty(2);
     return { creditsLost };
   }

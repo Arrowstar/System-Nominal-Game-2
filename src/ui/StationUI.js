@@ -11,9 +11,10 @@
  */
 
 import { COMPONENTS } from '../ship/Component.js';
-import { HULLS }      from '../ship/Hull.js';
+import { playerWallet } from '../core/Wallet.js';
 
 import { COMMODITIES } from '../economy/Commodity.js';
+import { HULLS } from '../ship/Hull.js';
 
 // Helper for icons based on category
 const CATEGORY_ICONS = {
@@ -36,11 +37,12 @@ export class StationUI {
    * @param {Ship}        ship         The player ship
    * @param {Function}    onUndock     Callback to exit docked state
    */
-  constructor(rootElement, dockedBody, ship, onUndock) {
+  constructor(rootElement, dockedBody, ship, onUndock, fameTracker) {
     this.root = rootElement;
     this.body = dockedBody;
     this.ship = ship;
     this.onUndock = onUndock;
+    this.fameTracker = fameTracker;
     this.activeStationIndex = 0;
 
     // If the player has no ship, force the terminal to focus on the Shipyard station (if one is available)
@@ -54,8 +56,8 @@ export class StationUI {
       }
     }
 
-    // Player wallet (simple global for now)
-    if (typeof window._credits === 'undefined') window._credits = 75000;
+    // Player wallet
+    // Wallet is managed via playerWallet
 
     this._activeTab = this.ship.loadout.hull.id === 'NO_SHIP' ? 'ships' : 'market';
     this._build();
@@ -248,7 +250,7 @@ export class StationUI {
     right.innerHTML = `
       <div style="text-align: right;">
         <div style="font-size: 9px; color: #484f58; letter-spacing: 0.1em;">CREDITS</div>
-        <div id="station-credits" style="font-size: 18px; font-weight: 700; color: #ffbf00; text-shadow: 0 0 10px rgba(255,191,0,0.3);">${window._credits.toLocaleString()} CR</div>
+        <div id="station-credits" style="font-size: 18px; font-weight: 700; color: #ffbf00; text-shadow: 0 0 10px rgba(255,191,0,0.3);">${playerWallet.credits.toLocaleString()} CR</div>
       </div>
       <div id="undock-container" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
         <!-- Undock button will be injected here -->
@@ -313,7 +315,7 @@ export class StationUI {
 
   _updateCreditsDisplay() {
     const el = this.container.querySelector('#station-credits');
-    if (el) el.textContent = `${window._credits.toLocaleString()} CR`;
+    if (el) el.textContent = `${playerWallet.credits.toLocaleString()} CR`;
   }
 
   _getUsedVolume() {
@@ -385,7 +387,7 @@ export class StationUI {
       const costDisplay = refuelContainer.querySelector('#refuel-cost-display');
       costDisplay.textContent = `${cost.toLocaleString()} CR`;
       
-      if (amount > 0 && window._credits >= cost) {
+      if (amount > 0 && playerWallet.credits >= cost) {
         buyRefuelBtn.disabled = false;
         buyRefuelBtn.style.opacity = '1';
         costDisplay.style.color = '#39ff14';
@@ -401,8 +403,8 @@ export class StationUI {
     buyRefuelBtn.addEventListener('click', () => {
       const amount = parseFloat(fuelSlider.value);
       const cost = Math.round(amount * costPerKg);
-      if (amount > 0 && window._credits >= cost) {
-        window._credits -= cost;
+      if (amount > 0 && playerWallet.credits >= cost) {
+        playerWallet.credits -= cost;
         this.ship.fuel += amount;
         this._updateCreditsDisplay();
         this._renderTab();
@@ -492,7 +494,7 @@ export class StationUI {
     const actionsContainer = row.querySelector('span:last-child');
 
     const canFit = (usedVol + (commodity.volumePerUnit || 0)) <= maxVol;
-    const canAfford = window._credits >= price;
+    const canAfford = playerWallet.credits >= price;
     const hasStock = market.getInventory(commodity.id) > 0;
 
     const buyBtn = document.createElement('button');
@@ -508,8 +510,8 @@ export class StationUI {
       const currentUsed = this._getUsedVolume();
       const currentMax = this.ship.loadout.hull.cargoCap || 0;
 
-      if (window._credits >= price && market.getInventory(commodity.id) > 0 && (currentUsed + (commodity.volumePerUnit||0)) <= currentMax) {
-        window._credits -= price;
+      if (playerWallet.credits >= price && market.getInventory(commodity.id) > 0 && (currentUsed + (commodity.volumePerUnit||0)) <= currentMax) {
+        playerWallet.credits -= price;
         // Add to cargo
         const existing = this.ship.cargos.find(c => c.type === commodity.id);
         if (existing) {
@@ -532,7 +534,7 @@ export class StationUI {
       sellBtn.textContent = 'SELL';
       sellBtn.style.cssText += 'font-size: 10px; padding: 4px 12px;';
       sellBtn.addEventListener('click', () => {
-        window._credits += price;
+        playerWallet.credits += price;
         const existing = this.ship.cargos.find(c => c.type === commodity.id);
         if (existing) {
           existing.amount -= 1;
@@ -619,7 +621,7 @@ export class StationUI {
              const idx = equipped.indexOf(comp);
              if (idx !== -1) {
                equipped.splice(idx, 1);
-               window._credits += sellAmount;
+               playerWallet.credits += sellAmount;
                this._updateCreditsDisplay();
              }
              this._renderTab();
@@ -689,7 +691,7 @@ export class StationUI {
         </div>
       `;
 
-      const canAfford = window._credits >= costAmount;
+      const canAfford = playerWallet.credits >= costAmount;
       const btn = document.createElement('button');
       btn.className = canAfford ? 'station-btn' : 'station-btn disabled';
       if (!canAfford) {
@@ -708,11 +710,11 @@ export class StationUI {
           const toRemove = existingOfSize[0];
           equipped.splice(equipped.indexOf(toRemove), 1);
           if (toRemove.cost) {
-             window._credits += Math.floor(toRemove.cost * 0.5);
+             playerWallet.credits += Math.floor(toRemove.cost * 0.5);
           }
         }
         // Add the new component
-        window._credits -= costAmount;
+        playerWallet.credits -= costAmount;
         equipped.push(comp);
         this._updateCreditsDisplay();
         this._renderTab();
@@ -812,7 +814,7 @@ export class StationUI {
       `;
       
       const netCost = hull.cost - tradeInValue;
-      const canAfford = window._credits >= netCost;
+      const canAfford = playerWallet.credits >= netCost;
       
       const btn = document.createElement('button');
       btn.className = canAfford ? 'station-btn' : 'station-btn disabled';
@@ -825,7 +827,7 @@ export class StationUI {
       btn.onclick = () => {
         if (!canAfford) return;
         
-        window._credits -= netCost;
+        playerWallet.credits -= netCost;
         
         const wasNoShip = this.ship.loadout.hull.id === 'NO_SHIP';
         
@@ -840,7 +842,7 @@ export class StationUI {
                 newSlots[comp.size]--;
             } else {
                 if (comp.cost) {
-                    window._credits += Math.floor(comp.cost * 0.5);
+                    playerWallet.credits += Math.floor(comp.cost * 0.5);
                 }
             }
         }
