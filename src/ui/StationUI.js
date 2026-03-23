@@ -244,32 +244,65 @@ export class StationUI {
 
     // Right: credits + undock
     const right = document.createElement('div');
-    right.style.cssText = `display: flex; align-items: center; gap: 20px;`;
+    right.style.cssText = `display: flex; align-items: center; gap: 24px;`;
     right.innerHTML = `
       <div style="text-align: right;">
         <div style="font-size: 9px; color: #484f58; letter-spacing: 0.1em;">CREDITS</div>
         <div id="station-credits" style="font-size: 18px; font-weight: 700; color: #ffbf00; text-shadow: 0 0 10px rgba(255,191,0,0.3);">${window._credits.toLocaleString()} CR</div>
       </div>
+      <div id="undock-container" style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+        <!-- Undock button will be injected here -->
+      </div>
     `;
+    header.appendChild(right);
+    this.container.appendChild(header);
+
+    this._updateUndockButton();
+  }
+
+  _updateUndockButton() {
+    const container = this.container.querySelector('#undock-container');
+    if (!container) return;
+    container.innerHTML = '';
+
     const noShip = this.ship.loadout.hull.id === 'NO_SHIP';
-    const undockBtn = document.createElement('button');
-    undockBtn.className = noShip ? 'station-btn disabled' : 'station-btn danger';
-    if (noShip) {
-      undockBtn.style.cssText += 'opacity: 0.5; cursor: not-allowed; border-color: rgba(255,0,0,0.3); color: #ff003f;';
+    const hasEngine = this.ship.loadout.totalThrust > 0;
+    const hasFuelTank = this.ship.loadout.maxFuel > 0;
+    const canUndock = !noShip && hasEngine && hasFuelTank;
+
+    // Warning message if applicable
+    if (!noShip) {
+      if (!hasEngine || !hasFuelTank) {
+        const warning = document.createElement('div');
+        warning.style.cssText = `font-size: 9px; color: #ff003f; font-weight: 700; letter-spacing: 0.05em;`;
+        warning.textContent = !hasEngine && !hasFuelTank ? 'NO ENGINE & FUEL TANK' : (!hasEngine ? 'NO ENGINE EQUIPPED' : 'NO FUEL TANK EQUIPPED');
+        container.appendChild(warning);
+      }
     }
+
+    const undockBtn = document.createElement('button');
+    undockBtn.className = canUndock ? 'station-btn danger' : 'station-btn disabled';
     undockBtn.textContent = 'UNDOCK';
     undockBtn.style.cssText += 'padding: 10px 20px; font-size: 13px; font-weight: 700;';
-    undockBtn.addEventListener('click', () => { if (!noShip && this.onUndock) this.onUndock(); });
-    right.appendChild(undockBtn);
-    header.appendChild(right);
+    
+    if (!canUndock) {
+      undockBtn.style.cssText += 'opacity: 0.5; cursor: not-allowed; border-color: rgba(255,0,0,0.3); color: #ff003f;';
+    }
 
-    this.container.appendChild(header);
+    undockBtn.addEventListener('click', () => { 
+      if (canUndock && this.onUndock) {
+        this.onUndock(); 
+      }
+    });
+
+    container.appendChild(undockBtn);
   }
 
   // ─── Tab Routing ──────────────────────────────────────────────────────────
 
   _renderTab() {
     this.contentArea.innerHTML = '';
+    this._updateUndockButton(); // Ensure undock state matches current loadout
     switch (this._activeTab) {
       case 'market':   this._renderMarket();   break;
       case 'shipyard': this._renderShipyard(); break;
@@ -281,6 +314,14 @@ export class StationUI {
   _updateCreditsDisplay() {
     const el = this.container.querySelector('#station-credits');
     if (el) el.textContent = `${window._credits.toLocaleString()} CR`;
+  }
+
+  _getUsedVolume() {
+    return this.ship.cargos.reduce((sum, c) => {
+      const def = COMMODITIES[c.type];
+      const vol = def ? (def.volumePerUnit || 0) : 0;
+      return sum + (c.amount * vol);
+    }, 0);
   }
 
   // ─── LOCAL MARKET ─────────────────────────────────────────────────────────
@@ -296,30 +337,90 @@ export class StationUI {
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
     `;
 
-    // Refuel button
-    const fuelPct = this.ship.maxFuel > 0 ? (this.ship.fuel / this.ship.maxFuel * 100).toFixed(0) : '100';
-    const refuelBtn = document.createElement('button');
-    refuelBtn.className = 'station-btn';
-    refuelBtn.innerHTML = `⛽ REFUEL <span style="opacity:0.5">(${fuelPct}%)</span>`;
-    refuelBtn.addEventListener('click', () => {
-      const missing = this.ship.maxFuel - this.ship.fuel;
-      const costPerKg = 0.5; // cheap refuel
-      const cost = Math.round(missing * costPerKg);
-      if (window._credits >= cost) {
+    // Refuel UI Container
+    const missing = Math.max(0, this.ship.maxFuel - this.ship.fuel);
+    const costPerKg = 0.5; // cheap refuel
+
+    const refuelContainer = document.createElement('div');
+    refuelContainer.style.cssText = `
+      display: flex; flex-direction: column; gap: 4px; padding: 4px 8px;
+      border: 1px solid rgba(0, 212, 255, 0.2); background: rgba(0, 212, 255, 0.03);
+      min-width: 240px;
+    `;
+
+    const refuelHeader = document.createElement('div');
+    refuelHeader.style.cssText = `display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #00d4ff; letter-spacing: 0.05em;`;
+    refuelHeader.innerHTML = `<span>⛽ REFUEL SYSTEM</span> <span id="refuel-cost-display">0 CR</span>`;
+    refuelContainer.appendChild(refuelHeader);
+
+    const sliderRow = document.createElement('div');
+    sliderRow.style.cssText = `display: flex; gap: 10px; align-items: center;`;
+
+    const fuelSlider = document.createElement('input');
+    fuelSlider.type = 'range';
+    fuelSlider.min = '0';
+    fuelSlider.max = Math.floor(missing).toString();
+    fuelSlider.value = '0';
+    fuelSlider.style.cssText = `flex: 1; cursor: pointer; accent-color: #00d4ff;`;
+
+    const fuelAmtDisplay = document.createElement('div');
+    fuelAmtDisplay.style.cssText = `width: 60px; font-size: 11px; color: #fff; text-align: right;`;
+    fuelAmtDisplay.textContent = '0.0 t';
+
+    sliderRow.appendChild(fuelSlider);
+    sliderRow.appendChild(fuelAmtDisplay);
+    refuelContainer.appendChild(sliderRow);
+
+    const buyRefuelBtn = document.createElement('button');
+    buyRefuelBtn.className = 'station-btn';
+    buyRefuelBtn.style.cssText = `width: 100%; margin-top: 4px; padding: 4px; font-size: 10px;`;
+    buyRefuelBtn.textContent = 'CONFIRM PURCHASE';
+    buyRefuelBtn.disabled = true;
+    buyRefuelBtn.style.opacity = '0.5';
+
+    const updateRefuelUI = () => {
+      const amount = parseFloat(fuelSlider.value);
+      const cost = Math.round(amount * costPerKg);
+      fuelAmtDisplay.textContent = `${(amount / 1000).toFixed(1)} t`;
+      const costDisplay = refuelContainer.querySelector('#refuel-cost-display');
+      costDisplay.textContent = `${cost.toLocaleString()} CR`;
+      
+      if (amount > 0 && window._credits >= cost) {
+        buyRefuelBtn.disabled = false;
+        buyRefuelBtn.style.opacity = '1';
+        costDisplay.style.color = '#39ff14';
+      } else {
+        buyRefuelBtn.disabled = true;
+        buyRefuelBtn.style.opacity = '0.5';
+        costDisplay.style.color = amount > 0 ? '#ff003f' : '#00d4ff';
+      }
+    };
+
+    fuelSlider.addEventListener('input', updateRefuelUI);
+
+    buyRefuelBtn.addEventListener('click', () => {
+      const amount = parseFloat(fuelSlider.value);
+      const cost = Math.round(amount * costPerKg);
+      if (amount > 0 && window._credits >= cost) {
         window._credits -= cost;
-        this.ship.fuel = this.ship.maxFuel;
+        this.ship.fuel += amount;
         this._updateCreditsDisplay();
         this._renderTab();
       }
     });
-    quickBar.appendChild(refuelBtn);
+
+    refuelContainer.appendChild(buyRefuelBtn);
+    quickBar.appendChild(refuelContainer);
 
     // Ship stats summary
+    const usedVol = this._getUsedVolume();
+    const maxVol = this.ship.loadout.hull.cargoCap || 0;
+    
     const stats = document.createElement('div');
     stats.style.cssText = `margin-left: auto; font-size: 10px; color: #8b949e; display: flex; gap: 24px; align-items: center;`;
     stats.innerHTML = `
       <span>FUEL: <span style="color:#00d4ff">${(this.ship.fuel / 1000).toFixed(1)}t / ${(this.ship.maxFuel / 1000).toFixed(1)}t</span></span>
-      <span>CARGO: <span style="color:#ffbf00">${this.ship.cargos.length} items</span></span>
+      <span>VOLUME: <span style="color:#ffbf00">${usedVol.toFixed(1)} / ${maxVol} m³</span></span>
       <span>HULL: <span style="color:#39ff14">${this.ship.integrity}/${this.ship.maxIntegrity}</span></span>
     `;
     quickBar.appendChild(stats);
@@ -338,7 +439,7 @@ export class StationUI {
       <span style="flex: 2;">COMMODITY</span>
       <span style="flex: 1; text-align: right;">PRICE</span>
       <span style="flex: 1; text-align: right;">SUPPLY</span>
-      <span style="flex: 1; text-align: center;">STATUS</span>
+      <span style="flex: 1; text-align: center;">VOL/UNIT</span>
       <span style="flex: 1; text-align: center;">HOLD</span>
       <span style="width: 200px; text-align: center;">ACTIONS</span>
     `;
@@ -347,94 +448,108 @@ export class StationUI {
     // Commodity rows
     const currentStation = this.body.stationInstances ? this.body.stationInstances[this.activeStationIndex] : this.body.station;
     const market = currentStation.market;
+    const requiredInputs = currentStation.production.getRequiredInputs();
+    const producedOutputs = currentStation.production.getProducedOutputs();
+
     for (const key of Object.keys(COMMODITIES)) {
-      const commodity = COMMODITIES[key];
-      const price = market.getPrice(commodity.id);
-      
-      const stationInv = market.getInventory(commodity.id);
-      const produced = stationInv > 200; // heuristic for high supply
-      const supplyLabel = `${stationInv} units`;
-      const supplyColor = stationInv > 500 ? '#39ff14' : (stationInv > 100 ? '#8b949e' : '#ffbf00');
+    const commodity = COMMODITIES[key];
+    const price = market.getPrice(commodity.id);
 
-      // Check legality
-      const isContraband = commodity.isIllegal && this.body.security !== 'none';
+    const stationInv = market.getInventory(commodity.id);
+    const produced = producedOutputs.has(commodity.id);
+    const supplyLabel = `${stationInv} units`;
+    const supplyColor = stationInv > 500 ? '#39ff14' : (stationInv > 100 ? '#8b949e' : '#ffbf00');
 
-      // How many of this does the player have?
-      const held = this.ship.cargos.filter(c => c.type === commodity.id).reduce((sum, c) => sum + c.amount, 0);
+    // Check legality
+    const isContraband = commodity.isIllegal && this.body.security !== 'none';
 
-      // Hide goods that aren't available and that the player doesn't have to sell
-      if (stationInv <= 0 && held <= 0) continue;
+    // How many of this does the player have?
+    const held = this.ship.cargos.filter(c => c.type === commodity.id).reduce((sum, c) => sum + c.amount, 0);
 
-      const row = document.createElement('div');
-      row.className = 'commodity-row';
-      row.innerHTML = `
-        <span style="width: 40px; font-size: 18px; text-align: center;">${getCategoryIcon(commodity.category)}</span>
-        <span style="flex: 2;">
-          <span style="color: #e6edf3; font-size: 13px;">${commodity.name}</span>
-          ${isContraband ? '<span style="color: #ff003f; font-size: 9px; margin-left: 8px; border: 1px solid rgba(255,0,63,0.4); padding: 1px 5px;">CONTRABAND</span>' : ''}
-        </span>
-        <span style="flex: 1; text-align: right; font-weight: 700; color: #ffbf00; font-size: 14px;">${price} CR</span>
-        <span style="flex: 1; text-align: right; color: ${supplyColor}; font-size: 11px;">${supplyLabel}</span>
-        <span style="flex: 1; text-align: center; font-size: 11px; color: ${!commodity.isIllegal ? '#39ff14' : '#ff003f'};">${!commodity.isIllegal ? 'LEGAL' : 'ILLICIT'}</span>
-        <span style="flex: 1; text-align: center; font-size: 12px; color: ${held > 0 ? '#ffbf00' : '#484f58'};">${held > 0 ? held : '—'}</span>
-        <span style="width: 200px; display: flex; gap: 8px; justify-content: center;"></span>
-      `;
+    // Hide goods that aren't available and that the player doesn't have to sell
+    if (stationInv <= 0 && held <= 0) continue;
 
-      // Action buttons container (last span)
-      const actionsContainer = row.querySelector('span:last-child');
+    // Station logic: only buys what it requires and doesn't produce
+    const stationBuys = requiredInputs.has(commodity.id) && !producedOutputs.has(commodity.id);
 
-      const buyBtn = document.createElement('button');
-      buyBtn.className = 'station-btn';
-      if (stationInv <= 0) {
-        buyBtn.classList.add('disabled');
-        buyBtn.style.cssText += 'opacity: 0.5; cursor: not-allowed;';
-      }
-      buyBtn.textContent = 'BUY';
-      buyBtn.style.cssText += 'font-size: 10px; padding: 4px 12px;';
-      buyBtn.addEventListener('click', () => {
-        if (window._credits >= price && market.getInventory(commodity.id) > 0) {
-          window._credits -= price;
-          // Add to cargo
-          const existing = this.ship.cargos.find(c => c.type === commodity.id);
-          if (existing) {
-            existing.amount += 1;
-            existing.mass += commodity.massPerUnit;
-          } else {
-            this.ship.cargos.push({ type: commodity.id, name: commodity.name, amount: 1, mass: commodity.massPerUnit });
-          }
-          market.removeInventory(commodity.id, 1);
+    const row = document.createElement('div');
+    row.className = 'commodity-row';
+    row.innerHTML = `
+      <span style="width: 40px; font-size: 18px; text-align: center;">${getCategoryIcon(commodity.category)}</span>
+      <span style="flex: 2;">
+        <span style="color: #e6edf3; font-size: 13px;">${commodity.name}</span>
+        ${isContraband ? '<span style="color: #ff003f; font-size: 9px; margin-left: 8px; border: 1px solid rgba(255,0,63,0.4); padding: 1px 5px;">CONTRABAND</span>' : ''}
+        ${!stationBuys && held > 0 ? '<span style="color: #484f58; font-size: 9px; margin-left: 8px; border: 1px solid rgba(255,255,255,0.1); padding: 1px 5px; text-transform:uppercase;">Not Required</span>' : ''}
+      </span>
+      <span style="flex: 1; text-align: right; font-weight: 700; color: #ffbf00; font-size: 14px;">${price} CR</span>
+      <span style="flex: 1; text-align: right; color: ${supplyColor}; font-size: 11px;">${supplyLabel}</span>
+      <span style="flex: 1; text-align: center; font-size: 11px; color: #8b949e;">${commodity.volumePerUnit || 0} m³</span>
+      <span style="flex: 1; text-align: center; font-size: 12px; color: ${held > 0 ? '#ffbf00' : '#484f58'};">${held > 0 ? held : '—'}</span>
+      <span style="width: 200px; display: flex; gap: 8px; justify-content: center;"></span>
+    `;
 
-          this._updateCreditsDisplay();
-          this._renderTab();
+    // Action buttons container (last span)
+    const actionsContainer = row.querySelector('span:last-child');
+
+    const canFit = (usedVol + (commodity.volumePerUnit || 0)) <= maxVol;
+    const canAfford = window._credits >= price;
+    const hasStock = market.getInventory(commodity.id) > 0;
+
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'station-btn';
+    if (!canFit || !canAfford || !hasStock) {
+      buyBtn.classList.add('disabled');
+      buyBtn.style.cssText += 'opacity: 0.5; cursor: not-allowed;';
+    }
+    buyBtn.textContent = 'BUY';
+    buyBtn.style.cssText += 'font-size: 10px; padding: 4px 12px;';
+    buyBtn.addEventListener('click', () => {
+      // Re-check conditions
+      const currentUsed = this._getUsedVolume();
+      const currentMax = this.ship.loadout.hull.cargoCap || 0;
+
+      if (window._credits >= price && market.getInventory(commodity.id) > 0 && (currentUsed + (commodity.volumePerUnit||0)) <= currentMax) {
+        window._credits -= price;
+        // Add to cargo
+        const existing = this.ship.cargos.find(c => c.type === commodity.id);
+        if (existing) {
+          existing.amount += 1;
+          existing.mass += commodity.massPerUnit;
+        } else {
+          this.ship.cargos.push({ type: commodity.id, name: commodity.name, amount: 1, mass: commodity.massPerUnit });
         }
-      });
-      actionsContainer.appendChild(buyBtn);
+        market.removeInventory(commodity.id, 1);
 
-      if (held > 0) {
-        const sellBtn = document.createElement('button');
-        sellBtn.className = 'station-btn amber';
-        sellBtn.textContent = 'SELL';
-        sellBtn.style.cssText += 'font-size: 10px; padding: 4px 12px;';
-        sellBtn.addEventListener('click', () => {
-          window._credits += price;
-          const existing = this.ship.cargos.find(c => c.type === commodity.id);
-          if (existing) {
-            existing.amount -= 1;
-            existing.mass -= commodity.massPerUnit;
-            market.addInventory(commodity.id, 1);
-            if (existing.amount <= 0) {
-              this.ship.cargos.splice(this.ship.cargos.indexOf(existing), 1);
-            }
-          }
-          this._updateCreditsDisplay();
-          this._renderTab();
-        });
-        actionsContainer.appendChild(sellBtn);
+        this._updateCreditsDisplay();
+        this._renderTab();
       }
+    });
+    actionsContainer.appendChild(buyBtn);
 
-      table.appendChild(row);
+    if (held > 0 && stationBuys) {
+      const sellBtn = document.createElement('button');
+      sellBtn.className = 'station-btn amber';
+      sellBtn.textContent = 'SELL';
+      sellBtn.style.cssText += 'font-size: 10px; padding: 4px 12px;';
+      sellBtn.addEventListener('click', () => {
+        window._credits += price;
+        const existing = this.ship.cargos.find(c => c.type === commodity.id);
+        if (existing) {
+          existing.amount -= 1;
+          existing.mass -= commodity.massPerUnit;
+          market.addInventory(commodity.id, 1);
+          if (existing.amount <= 0) {
+            this.ship.cargos.splice(this.ship.cargos.indexOf(existing), 1);
+          }
+        }
+        this._updateCreditsDisplay();
+        this._renderTab();
+      });
+      actionsContainer.appendChild(sellBtn);
     }
 
+    table.appendChild(row);
+    }
     wrapper.appendChild(table);
     this.contentArea.appendChild(wrapper);
   }
@@ -655,6 +770,7 @@ export class StationUI {
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px;">
         <span>BASE MASS</span><span style="color: #ffbf00; text-align: right;">${(currentHull.baseMass / 1000).toFixed(1)} t</span>
         <span>INTEGRITY</span><span style="color: #39ff14; text-align: right;">${currentHull.integrity} HP</span>
+        <span>CARGO CAP</span><span style="color: #00d4ff; text-align: right;">${currentHull.cargoCap || 0} m³</span>
       </div>
     `;
     leftPanel.appendChild(statsDiv);
@@ -684,7 +800,7 @@ export class StationUI {
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
             <div style="color: #e6edf3; font-size: 14px; font-weight: 600; margin-bottom: 4px;">${hull.name.toUpperCase()}</div>
-            <div style="color: #484f58; font-size: 10px;">MASS: ${(hull.baseMass/1000).toFixed(0)}t · INT: ${hull.integrity}HP</div>
+            <div style="color: #484f58; font-size: 10px;">MASS: ${(hull.baseMass/1000).toFixed(0)}t · INT: ${hull.integrity}HP · CARGO: ${hull.cargoCap || 0}m³</div>
             <div style="color: #8b949e; font-size: 10px; margin-top: 4px;">
               SLOTS: <span style="color:#00d4ff">${s}S</span> / <span style="color:#00d4ff">${m}M</span> / <span style="color:#00d4ff">${l}L</span>
             </div>

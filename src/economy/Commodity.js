@@ -11,6 +11,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.RAW,
         basePrice: 15,
         massPerUnit: 1.0,
+        volumePerUnit: 1.0,
         isIllegal: false,
     },
     RAW_ORE: {
@@ -19,6 +20,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.RAW,
         basePrice: 25,
         massPerUnit: 2.0,
+        volumePerUnit: 0.8,
         isIllegal: false,
     },
     HELIUM_3: {
@@ -27,6 +29,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.RAW,
         basePrice: 200,
         massPerUnit: 0.5,
+        volumePerUnit: 2.0,
         isIllegal: false,
     },
     BIOMASS: {
@@ -35,6 +38,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.RAW,
         basePrice: 10,
         massPerUnit: 1.0,
+        volumePerUnit: 1.5,
         isIllegal: false,
     },
     REFINED_METALS: {
@@ -43,6 +47,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.INTERMEDIATE,
         basePrice: 100,
         massPerUnit: 1.5,
+        volumePerUnit: 0.5,
         isIllegal: false,
     },
     PLASTICS: {
@@ -51,6 +56,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.INTERMEDIATE,
         basePrice: 50,
         massPerUnit: 0.8,
+        volumePerUnit: 1.2,
         isIllegal: false,
     },
     CHEMICALS: {
@@ -59,6 +65,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.INTERMEDIATE,
         basePrice: 80,
         massPerUnit: 1.0,
+        volumePerUnit: 1.0,
         isIllegal: false,
     },
     MACHINERY_PARTS: {
@@ -67,6 +74,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.INTERMEDIATE,
         basePrice: 150,
         massPerUnit: 1.2,
+        volumePerUnit: 1.5,
         isIllegal: false,
     },
     FOOD_PAKS: {
@@ -75,6 +83,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 40,
         massPerUnit: 0.5,
+        volumePerUnit: 0.5,
         isIllegal: false,
     },
     MEDICINE: {
@@ -83,6 +92,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 250,
         massPerUnit: 0.2,
+        volumePerUnit: 0.2,
         isIllegal: false,
     },
     ADVANCED_ELECTRONICS: {
@@ -91,6 +101,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 500,
         massPerUnit: 0.5,
+        volumePerUnit: 0.5,
         isIllegal: false,
     },
     LUXURIES: {
@@ -99,6 +110,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 800,
         massPerUnit: 1.0,
+        volumePerUnit: 1.0,
         isIllegal: false,
     },
     SHIP_COMPONENTS: {
@@ -107,6 +119,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 1200,
         massPerUnit: 2.0,
+        volumePerUnit: 2.0,
         isIllegal: false,
     },
     ILLEGAL_STIMS: {
@@ -115,6 +128,7 @@ export const COMMODITIES = {
         category: COMMODITY_CATEGORIES.END_PRODUCT,
         basePrice: 1000,
         massPerUnit: 0.1,
+        volumePerUnit: 0.2,
         isIllegal: true,
     }
 };

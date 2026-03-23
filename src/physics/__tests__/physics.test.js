@@ -461,10 +461,10 @@ describe('getElementsFromState', () => {
 
 describe('Gravity coverage', () => {
   // Dynamically import the solar system to check body count
-  it('SolarSystem.gravBodies includes all 17 bodies', async () => {
+  it('SolarSystem.gravBodies includes all 18 bodies', async () => {
     const { solarSystem } = await import('../../world/SolarSystem.js');
-    // 1 star + 11 primaries + 5 moons = 17
-    expect(solarSystem.gravBodies.length).toBe(17);
+    // 1 star + 11 primaries + 6 moons = 18
+    expect(solarSystem.gravBodies.length).toBe(18);
   });
 
   it('gravAccelAt returns non-zero acceleration near each body', async () => {

@@ -21,7 +21,7 @@ export const MILESTONES = [
     id:          'SPEED_DEMON',
     category:    'Pilot',
     title:       'Speed Demon',
-    description: 'Reach a velocity of 10,000 m/s.',
+    description: 'Reach a velocity of 250,000 m/s.',
     fame:        3,
     repeatable:  false,
   },
@@ -243,7 +243,7 @@ export class FameTracker {
    */
   checkSpeedDemon(speed) {
     if (this.completed.has('SPEED_DEMON')) return;
-    if (speed >= 10000) {
+    if (speed >= 250000) {
       this._awardMilestone('SPEED_DEMON');
     }
   }

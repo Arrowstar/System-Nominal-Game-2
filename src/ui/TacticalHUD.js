@@ -549,7 +549,7 @@ export class TacticalHUD {
       const speedEl = this.dockPrompt.querySelector('#dock-prompt-speed');
 
       if (docking.canDock) {
-        textEl.textContent = `PRESS [F] TO DOCK AT ${label.toUpperCase()}`;
+        textEl.textContent = `PRESS [E] TO DOCK AT ${label.toUpperCase()}`;
         textEl.style.color = '#39ff14';
         this.dockPrompt.style.borderColor = 'rgba(57,255,20,0.4)';
         this.dockPrompt.style.boxShadow = '0 0 15px rgba(57,255,20,0.15)';

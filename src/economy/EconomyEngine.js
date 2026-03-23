@@ -4,8 +4,17 @@ import { OrderBoard } from './OrderBoard.js';
 import { COMMODITIES } from './Commodity.js';
 import { Loadout } from '../ship/Loadout.js';
 import { Ship } from '../physics/Ship.js';
+import { HULLS } from '../ship/Hull.js';
 import { EnemyAI } from '../combat/EnemyAI.js';
 import { Vec2 } from '../core/Vec2.js';
+
+const FREIGHTER_CONFIGS = [
+    { hull: 'PONY',     components: ['ENG_S_TORCH', 'TANK_M_ARRAY'] },
+    { hull: 'WAYFARER', components: ['ENG_M_TORCH', 'RX_S_FUSION', 'TANK_S_CELL', 'TANK_S_CELL'] },
+    { hull: 'OX',       components: ['ENG_M_TORCH', 'RX_M_FUSION', 'TANK_S_CELL'] },
+    { hull: 'CAMEL',    components: ['ENG_L_TORCH', 'RX_M_FUSION', 'TANK_M_ARRAY'] },
+    { hull: 'MAMMOTH',  components: ['ENG_L_TORCH', 'TANK_L_BULK', 'RX_M_FUSION', 'TANK_S_CELL'] }
+];
 
 export class EconomyEngine {
     constructor(solarSystem) {
@@ -26,7 +35,8 @@ export class EconomyEngine {
             const station = {
                 name: stationMeta.name,
                 type: stationMeta.type,
-                body: stationMeta.body
+                body: stationMeta.body,
+                outboundCount: 0
             };
             
             station.market = new Market(station);
@@ -53,9 +63,17 @@ export class EconomyEngine {
                     break;
                 case 'agricultural':
                     station.production.addRecipe('FOOD_PROCESSING');
+                    station.production.addRecipe('PHARMACEUTICALS');
                     break;
                 case 'refinery':
                     station.production.addRecipe('CHEMICAL_REFINING');
+                    station.production.addRecipe('PLASTICS_SYNTHESIS');
+                    break;
+                case 'science':
+                    station.production.addRecipe('PHARMACEUTICALS');
+                    break;
+                case 'military':
+                    station.production.addRecipe('MACHINING');
                     break;
                 case 'blackmarket':
                 case 'contraband':
@@ -108,6 +126,18 @@ export class EconomyEngine {
             station.production.update(dt);
             station.market.update(dt);
         }
+
+        // Cleanup destroyed NPCs and free station outbound slots
+        for (let i = npcShips.length - 1; i >= 0; i--) {
+            const ship = npcShips[i];
+            // If ship is destroyed or AI is inactive (arrived), clean up
+            if (ship.destroyed || (ship.ai && !ship.ai.active)) {
+                if (ship.sourceStation) {
+                    ship.sourceStation.outboundCount = Math.max(0, ship.sourceStation.outboundCount - 1);
+                }
+                npcShips.splice(i, 1);
+            }
+        }
         
         if (simTime > this.nextOrderTime) {
             this.nextOrderTime = simTime + 3600; // Hourly
@@ -124,17 +154,12 @@ export class EconomyEngine {
     postOrders(simTime) {
         for (const station of this.stations) {
             const p = station.production;
-            const outputs = new Set();
-            for (const r of p.activeRecipes) {
-                for (const out of Object.keys(r.outputs)) outputs.add(out);
-            }
-            const sources = new Set(Object.keys(p.sources));
+            const inputs = p.getRequiredInputs();
+            const outputs = p.getProducedOutputs();
             
-            for (const key of Object.keys(COMMODITIES)) {
-                const id = COMMODITIES[key].id;
-                
+            for (const id of inputs) {
                 // Do not buy what we produce or source
-                if (outputs.has(id) || sources.has(id)) continue;
+                if (outputs.has(id)) continue;
                 
                 let inv = station.market.getInventory(id);
                 // Factor in incoming goods from OPEN and ACCEPTED orders
@@ -166,36 +191,69 @@ export class EconomyEngine {
             
             let bestProducer = null;
             let bestProfit = 0;
-            let amountToShip = 0;
             
+            // Randomly select a freighter configuration for variety
+            const config = FREIGHTER_CONFIGS[Math.floor(Math.random() * FREIGHTER_CONFIGS.length)];
+            const hull = HULLS[config.hull];
+            if (!hull) continue;
+            
+            const shipCapacity = hull.cargoCap;
+
             for (const station of this.stations) {
                 if (station === order.consumer) continue;
                 
                 const inv = station.market.getInventory(order.commodityId);
                 const localPrice = station.market.getPrice(order.commodityId);
                 
-                if (inv >= 50 && localPrice < order.priceOffered) {
+                if (inv >= 10 && localPrice < order.priceOffered) {
                     const profitPerUnit = order.priceOffered - localPrice;
                     if (profitPerUnit > bestProfit) {
                         bestProfit = profitPerUnit;
                         bestProducer = station;
-                        amountToShip = Math.min(inv, order.amount);
                     }
                 }
             }
             
             // Accept the order and spawn ship
             if (bestProducer) {
-                if (this.orderBoard.acceptOrder(order.id, bestProducer)) {
-                    order.amount = amountToShip;
-                    this.spawnMerchant(order, bestProducer, simTime, npcShips);
+                // Traffic Control: Max outbound freighters per station
+                if (bestProducer.outboundCount >= 5) continue;
+
+                const localPrice = bestProducer.market.getPrice(order.commodityId);
+                const profitPerUnit = order.priceOffered - localPrice;
+                
+                // Profit Probability: 5% base + 1% per 2 credits of profit (1.0 chance at 190 profit)
+                const spawnChance = 0.05 + (profitPerUnit / 200.0);
+                if (Math.random() > spawnChance) continue;
+
+                const inv = bestProducer.market.getInventory(order.commodityId);
+                // Ship as much as we can: limited by order amount, producer inventory, or ship hull
+                const amountToShip = Math.floor(Math.min(inv, order.amount, shipCapacity));
+                
+                if (amountToShip <= 0) continue;
+
+                if (amountToShip < order.amount) {
+                    // Partial fill: split the order
+                    // Original order keeps the remainder and stays OPEN
+                    // New child order takes the 'amountToShip' and gets ACCEPTED
+                    const subOrder = this.orderBoard.splitOrder(order.id, amountToShip);
+                    if (subOrder && this.orderBoard.acceptOrder(subOrder.id, bestProducer)) {
+                        this.spawnMerchant(subOrder, bestProducer, simTime, npcShips, config);
+                    }
+                } else {
+                    // Full fill (or close enough that we take the whole order slot)
+                    if (this.orderBoard.acceptOrder(order.id, bestProducer)) {
+                        order.amount = amountToShip;
+                        this.spawnMerchant(order, bestProducer, simTime, npcShips, config);
+                    }
                 }
             }
         }
     }
     
-    spawnMerchant(order, producer, simTime, npcShips) {
-        const merchantLoadout = new Loadout('WAYFARER', ['DEBUG_TORCH', 'TANK_L_STD']); 
+    spawnMerchant(order, producer, simTime, npcShips, config) {
+        const merchantLoadout = new Loadout(config.hull, config.components);
+
         const sourcePos = producer.body.orbit ? producer.body.orbit.getPosition(simTime) : Vec2.zero();
         const sourceVel = producer.body.orbit ? producer.body.orbit.getVelocity(simTime) : Vec2.zero();
         const offset = new Vec2((Math.random()-0.5)*2000, (Math.random()-0.5)*2000); 
@@ -208,6 +266,8 @@ export class EconomyEngine {
         });
         
         merchant.ai = new EnemyAI(merchant, 'MERCHANT');
+        merchant.sourceStation = producer; 
+        producer.outboundCount++;
         
         // Remove from producer market
         producer.market.removeInventory(order.commodityId, order.amount);

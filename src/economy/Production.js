@@ -107,6 +107,28 @@ export class StationProduction {
         this.sinks[commodityId] = unitsPerSecond;
         this.sinkTimers[commodityId] = 0;
     }
+
+    /**
+     * Returns a Set of commodity IDs that this station consumes for recipes or sinks.
+     */
+    getRequiredInputs() {
+        const ids = new Set(Object.keys(this.sinks));
+        for (const r of this.activeRecipes) {
+            for (const id of Object.keys(r.inputs)) ids.add(id);
+        }
+        return ids;
+    }
+
+    /**
+     * Returns a Set of commodity IDs that this station produces naturally or via recipes.
+     */
+    getProducedOutputs() {
+        const ids = new Set(Object.keys(this.sources));
+        for (const r of this.activeRecipes) {
+            for (const id of Object.keys(r.outputs)) ids.add(id);
+        }
+        return ids;
+    }
     
     // update is called every simulation tick
     update(dt) {

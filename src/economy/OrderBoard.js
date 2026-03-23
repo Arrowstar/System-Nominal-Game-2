@@ -43,6 +43,34 @@ export class OrderBoard {
         return false;
     }
 
+    /**
+     * Splits an existing OPEN order.
+     * Reduces original order amount by 'amount'.
+     * Returns a new OPEN order for 'amount'.
+     */
+    splitOrder(orderId, amount) {
+        const order = this.orders.find(o => o.id === orderId);
+        if (!order || order.status !== 'OPEN' || amount >= order.amount || amount <= 0) return null;
+        
+        // Create new child order for the shipment
+        const newOrder = {
+            id: order.id + '-' + (this.orderIdCounter++), 
+            consumer: order.consumer,
+            commodityId: order.commodityId,
+            amount: amount,
+            priceOffered: order.priceOffered,
+            status: 'OPEN',
+            producer: null,
+            createdSimTime: order.createdSimTime
+        };
+        
+        // Reduce original
+        order.amount -= amount;
+        
+        this.orders.push(newOrder);
+        return newOrder;
+    }
+
     fulfillOrder(orderId) {
         const order = this.orders.find(o => o.id === orderId);
         if (order && order.status === 'ACCEPTED') {

@@ -6,50 +6,50 @@
  */
 
 export const COMPONENTS = {
-  // --- ENGINES ---
-  ENG_S_MONO: {
-    id: 'ENG_S_MONO',
-    name: 'Mono-Prop RCS',
+  // --- ENGINES (TORCH TECHNOLOGY) ---
+  ENG_S_RCS: {
+    id: 'ENG_S_RCS',
+    name: 'Pulsed Plasma RCS',
     type: 'Engine',
     size: 'S',
     cost: 5000,
     mass: 500,        // 0.5t
-    thrust: 50000,    // 50 kN
-    isp: 250,         // low efficiency
+    thrust: 200000,   // 200 kN
+    isp: 50000,       // high efficiency RCS
     powerDraw: 1      // 1 MW
   },
-  ENG_S_KERO: {
-    id: 'ENG_S_KERO',
-    name: 'Kerosene Rocket',
+  ENG_S_TORCH: {
+    id: 'ENG_S_TORCH',
+    name: 'Micro-Fusion Torch',
     type: 'Engine',
     size: 'S',
-    cost: 15000,
+    cost: 25000,
     mass: 1200,       // 1.2t
-    thrust: 150000,   // 150 kN
-    isp: 350,         // medium efficiency
-    powerDraw: 2
+    thrust: 1200000,  // 1,200 kN
+    isp: 200000,      // torch efficiency
+    powerDraw: 5
   },
-  ENG_M_NUC: {
-    id: 'ENG_M_NUC',
-    name: 'NERVA Nuclear',
+  ENG_M_TORCH: {
+    id: 'ENG_M_TORCH',
+    name: 'Magnetic Fusion Drive',
     type: 'Engine',
     size: 'M',
-    cost: 150000,
+    cost: 250000,
     mass: 8000,       // 8t
-    thrust: 400000,   // 400 kN
-    isp: 900,         // high efficiency
-    powerDraw: 0      // uses its own reactor
+    thrust: 6000000,  // 6,000 kN
+    isp: 450000,      // high efficiency
+    powerDraw: 20
   },
-  ENG_L_PLASMA: {
-    id: 'ENG_L_PLASMA',
-    name: 'Plasma Torch',
+  ENG_L_TORCH: {
+    id: 'ENG_L_TORCH',
+    name: 'Direct Fusion Torch',
     type: 'Engine',
     size: 'L',
-    cost: 500000,
+    cost: 800000,
     mass: 25000,      // 25t
-    thrust: 2000000,  // 2000 kN
-    isp: 5000,        // ultra efficiency
-    powerDraw: 50     // requires massive external power
+    thrust: 40000000, // 40,000 kN
+    isp: 800000,      // ultra efficiency
+    powerDraw: 100    // massive power required
   },
   DEBUG_TORCH: {
     id: 'DEBUG_TORCH',
@@ -57,39 +57,39 @@ export const COMPONENTS = {
     type: 'Engine',
     size: 'S',
     cost: 0,
-    mass: 1,          // negligible
-    thrust: 200000000, // 200,000 kN (100× Plasma Torch)
-    isp: 50000000,     // 10000× Plasma Torch — essentially infinite dV
+    mass: 1,
+    thrust: 200000000,
+    isp: 50000000,
     powerDraw: 0
   },
 
-  // --- TANKS ---
-  TANK_S_STD: {
-    id: 'TANK_S_STD',
-    name: 'Small Fuel Cell',
+  // --- TANKS (HYDROGEN LATTICE STORAGE) ---
+  TANK_S_CELL: {
+    id: 'TANK_S_CELL',
+    name: 'Hydrogen Lattice Cell',
     type: 'Tank',
     size: 'S',
-    cost: 2000,
-    mass: 200,        // empty mass 0.2t
-    fuelCap: 10000    // 10t fuel
+    cost: 8000,
+    mass: 1000,        // empty mass 1.0t
+    fuelCap: 50000     // 50t fuel
   },
-  TANK_M_STD: {
-    id: 'TANK_M_STD',
-    name: 'Medium Drop Tank',
+  TANK_M_ARRAY: {
+    id: 'TANK_M_ARRAY',
+    name: 'Cryo-Containment Array',
     type: 'Tank',
     size: 'M',
-    cost: 10000,
-    mass: 800,        // empty mass 0.8t
-    fuelCap: 50000    // 50t fuel
+    cost: 45000,
+    mass: 5000,        // empty mass 5.0t
+    fuelCap: 250000    // 250t fuel
   },
-  TANK_L_STD: {
-    id: 'TANK_L_STD',
-    name: 'Large Core Stage',
+  TANK_L_BULK: {
+    id: 'TANK_L_BULK',
+    name: 'Bulk Slush-H2 Tank',
     type: 'Tank',
     size: 'L',
-    cost: 45000,
-    mass: 4000,       // empty mass 4.0t
-    fuelCap: 250000   // 250t fuel
+    cost: 150000,
+    mass: 20000,       // empty mass 20.0t
+    fuelCap: 1000000   // 1,000t fuel
   },
 
   // --- REACTORS ---

@@ -261,7 +261,7 @@ function showHowToPlay() {
           <kbd style="color:#39ff14">A/D</kbd> Rotation<br>
           <kbd style="color:#39ff14">X</kbd> Cut / <kbd style="color:#39ff14">Z</kbd> Max Throttle<br>
           <kbd style="color:#39ff14">Tab</kbd> Map ↔ Tactical<br>
-          <kbd style="color:#39ff14">F</kbd> Focus Ship / Dock
+          <kbd style="color:#39ff14">F</kbd> Focus Ship &nbsp;·&nbsp; <kbd style="color:#39ff14">E</kbd> Dock
         </div>
         <div>
           <b style="color:#e6edf3">NAVIGATION</b><br>
@@ -926,8 +926,8 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
-  // Docking — F key (only when NOT in NAV map mode, or when there's no other F-key action)
-  if ((states.is(STATES.TACTICAL) || states.is(STATES.NAV)) && (e.key === 'f' || e.key === 'F')) {
+  // Docking — E key
+  if ((states.is(STATES.TACTICAL) || states.is(STATES.NAV)) && (e.key === 'e' || e.key === 'E')) {
     if (docking.canDock) {
       e.preventDefault();
       states.transition(STATES.DOCKED);

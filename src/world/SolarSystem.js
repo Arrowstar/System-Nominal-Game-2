@@ -107,18 +107,40 @@ const foundry = makeBody({
 });
 
 /**
- * Aethelgard — Capital world. High demand for Luxuries. Home of Vane Shipyard.
+ * Aethelgard — Capital world. High demand for Luxuries.
  */
-const aethelgard = makeBody({
-  name:     'Aethelgard',
-  type:     'rocky',
-  orbit: new KeplerOrbit({
+const aethelgardOrbit = new KeplerOrbit({
     a:      1.0 * AU,
     e:      0.02,
     w:      0,
     M0:     0,
     period: 100 * DAY,          // "1 year" in game terms
-  }),
+});
+
+const vane = makeBody({
+    name:     'Vane',
+    type:     'rocky',
+    orbit: new KeplerOrbit({
+        a:      0.5e9,
+        e:      0.01,
+        w:      1.2,
+        M0:     2.5,
+        period: 8 * DAY,
+        parent: aethelgardOrbit,
+    }),
+    mass:     1.2e22,
+    radius:   1.1e6,
+    color:    '#B0BEC5',
+    security: 'high',
+    economy:  'shipyard',
+    produces: [],
+    stations: [{ name: 'Vane Shipyard', type: 'shipyard' }],
+});
+
+const aethelgard = makeBody({
+  name:     'Aethelgard',
+  type:     'rocky',
+  orbit:    aethelgardOrbit,
   mass:     5.97e24,
   radius:   6.37e6,
   color:    '#42A5F5',
@@ -128,8 +150,8 @@ const aethelgard = makeBody({
   consumes: ['Luxuries'],
   stations: [
     { name: 'Aethelgard Prime', type: 'capital' },
-    { name: 'Vane Shipyard',    type: 'shipyard' },
   ],
+  moons:    [vane],
 });
 
 /**
@@ -458,6 +480,7 @@ export class SolarSystem {
 
     // All moons
     this.moons = [
+      vane,               // Aethelgard
       hyperion, atlas,    // Kronos
       triton,             // Oceanus
       nyx,                // Erebus

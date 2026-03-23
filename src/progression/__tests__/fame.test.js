@@ -57,21 +57,21 @@ describe('FameTracker', () => {
 
   // ── Speed Demon ─────────────────────────────────────────────────────────
 
-  it('checkSpeedDemon below 10,000 m/s does not trigger milestone', () => {
-    ft.checkSpeedDemon(9999);
+  it('checkSpeedDemon below 250,000 m/s does not trigger milestone', () => {
+    ft.checkSpeedDemon(249999);
     expect(ft.completed.has('SPEED_DEMON')).toBe(false);
     expect(ft.fame).toBe(0);
   });
 
-  it('checkSpeedDemon >= 10,000 m/s triggers SPEED_DEMON (+3 fame)', () => {
-    ft.checkSpeedDemon(10000);
+  it('checkSpeedDemon >= 250,000 m/s triggers SPEED_DEMON (+3 fame)', () => {
+    ft.checkSpeedDemon(250000);
     expect(ft.completed.has('SPEED_DEMON')).toBe(true);
     expect(ft.fame).toBe(3);
   });
 
   it('checkSpeedDemon only fires milestone once', () => {
-    ft.checkSpeedDemon(12000);
-    ft.checkSpeedDemon(15000);
+    ft.checkSpeedDemon(260000);
+    ft.checkSpeedDemon(300000);
     expect(ft.completed.has('SPEED_DEMON')).toBe(true);
     expect(ft.fame).toBe(3);
   });
