@@ -14,6 +14,8 @@ class MockBody {
         // Add minimal orbit interface if needed
         this.orbit = null; 
     }
+    getPosition(t) { return this.position; }
+    getVelocity(t) { return this.velocity; }
 }
 
 class MockSolarSystem {

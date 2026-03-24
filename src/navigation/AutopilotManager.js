@@ -13,6 +13,7 @@
 
 import { Vec2 } from '../core/Vec2.js';
 import { TPBVPSolver } from './TPBVPSolver.js';
+import { G_SI, SOFTENING_SI } from './CanonicalUnits.js';
 
 export const AP_STATE = {
   OFF:      'OFF',
@@ -23,9 +24,7 @@ export const AP_STATE = {
 };
 
 const GUIDANCE_INTERVAL = 0.5; // Seconds (sim time) between solver updates
-const TERMINAL_HANDOFF_TIME = 86400 * 2.0; // 2 days out, switch to PD (unless close)
-// Dynamic handoff: max(2 days, 100 * dt_phys)
-const TERMINAL_DIST_THRESHOLD = 0.05 * 1.496e11; // 0.05 AU
+// TERMINAL_HANDOFF_TIME and TERMINAL_DIST_THRESHOLD removed in favor of dynamic metrics
 
 export class AutopilotManager {
   constructor(solarSystem) {
@@ -34,6 +33,8 @@ export class AutopilotManager {
     
     this.state = AP_STATE.OFF;
     this.targetBody = null;
+    this.efficiency = 0.0;
+    this.estimatedFuelCost = 0;
     
     // Flight Parameters
     this.tArrival = 0; // Desired arrival time (sim time)
@@ -43,6 +44,8 @@ export class AutopilotManager {
     this.costates = [0, 0, 0, 0]; // [lrx, lry, lvx, lvy]
     this.path = []; // Predicted trajectory for visualization
     this.lastSolveTime = 0;
+    this.lastRealSolveTime = 0; // Real-time throttle
+    this.engageTime = 0;
     
     // Public props for UI
     this.interceptPt = null;
@@ -52,16 +55,19 @@ export class AutopilotManager {
     this.error = 0; // BVP error
   }
 
-  get active() { return this.state !== AP_STATE.OFF && this.state !== AP_STATE.HOLD; }
+  get active() { return this.state !== AP_STATE.OFF; }
+  get isExecuting() { return this.state === AP_STATE.OPTIMAL || this.state === AP_STATE.TERMINAL; }
 
   /**
-   * Engage autopilot toward a target.
+   * Engage autopilot system for a target (STANDBY/PREVIEW).
    * @param {object} body         Target body
-   * @param {number} flightTime   (Optional) Flight time in seconds. If null, heuristic used.
+   * @param {number} flightTime   (Optional) Flight time in seconds.
    */
   engage(body, flightTime = null) {
     this.targetBody = body;
     this.state = AP_STATE.STANDBY;
+    this._needsInit = true; // Trigger BVP solve for preview
+    this.engageTime = (typeof window !== 'undefined' && window.solarSystem && window.solarSystem.gameLoop) ? window.solarSystem.gameLoop.simTime : 0;
     
     // Heuristic for flight time if not provided
     // Constant thrust transfers are faster than Hohmann.
@@ -74,15 +80,25 @@ export class AutopilotManager {
             // 1 AU ~ 60 days?
             const AU = 1.496e11;
             const distAU = dist / AU;
-            flightTime = Math.max(30, distAU * 40) * 86400; // 40 days per AU, min 30 days
+            const baseHeuristic = Math.max(1, distAU * 40) * 86400; // 40 days per AU, min 1 day
+            flightTime = baseHeuristic * (1.0 + this.efficiency * 3.0);
         } else {
             flightTime = 90 * 86400;
         }
     }
     this.flightTime = flightTime;
-    
-    // Calculate initial guess immediately
-    this._initializeTrajectory();
+  }
+
+  /**
+   * Transition from STANDBY to active EXECUTION.
+   */
+  execute() {
+    if (this.state === AP_STATE.STANDBY && this.targetBody) {
+        this.state = AP_STATE.OPTIMAL;
+        if (typeof window !== 'undefined' && window.playerShip) {
+            window.playerShip.usePrecisionIntegration = true;
+        }
+    }
   }
 
   disengage() {
@@ -95,10 +111,18 @@ export class AutopilotManager {
     }
   }
 
+  setEfficiency(val) {
+    this.efficiency = Math.min(1.0, Math.max(0.0, val));
+    // If already active, we need to restart the trajectory with the new flight time
+    if (this.state !== AP_STATE.OFF && this.targetBody) {
+        this.engage(this.targetBody);
+    }
+  }
+
   _initializeTrajectory() {
     if (typeof window === 'undefined') return;
     const ship = window.playerShip;
-    const loop = window.solarSystem ? window.solarSystem.gameLoop : { simTime: 0 }; // Hacky access to simTime if not passed
+    const loop = (window.solarSystem && window.solarSystem.gameLoop) ? window.solarSystem.gameLoop : { simTime: 0 }; // Hacky access to simTime if not passed
     // Better: We need simTime. engage() usually called from UI event.
     // We'll initialize in the first update() call if needed.
     this.state = AP_STATE.OPTIMAL;
@@ -115,22 +139,31 @@ export class AutopilotManager {
     
     if (this._needsInit) {
         this.tArrival = simTime + this.flightTime;
-        // Run cold start
+        // Run cold start for preview
         const res = this.solver.solve(ship, this.targetBody, simTime, this.tArrival);
         this.costates = res.costates;
         this.path = res.path;
         this.error = res.error;
+        this.estimatedFuelCost = res.fuelCost;
         this.lastSolveTime = simTime;
         this._needsInit = false;
     }
 
-    if (this.state === AP_STATE.OPTIMAL) {
+    if (this.state === AP_STATE.STANDBY) {
+        this._updatePreview(ship, dt, simTime);
+    } else if (this.state === AP_STATE.OPTIMAL) {
         this._updateOptimal(ship, dt, simTime, timeWarp);
     } else if (this.state === AP_STATE.TERMINAL) {
+        this.path = []; // Clear old BVP path — allows UI fallback to live prediction
         this._updateTerminal(ship, dt, simTime, timeWarp);
     } else if (this.state === AP_STATE.HOLD) {
         ship.throttle = 0;
         ship.usePrecisionIntegration = false;
+    }
+
+    // Costate Propagation: Maintain guidance quality between full BVP solves
+    if (this.isExecuting && !this._needsInit) {
+        this._propagateCostates(ship, dt, simTime);
     }
 
     // Telemetry updates
@@ -144,19 +177,58 @@ export class AutopilotManager {
     this.dvRemaining = relVel.len(); // Rough proxy
   }
 
+  /**
+   * Background trajectory preview in STANDBY mode.
+   */
+  _updatePreview(ship, dt, simTime) {
+    const nowReal = performance.now() * 0.001;
+    const realElapsed = nowReal - this.lastRealSolveTime;
+    
+    // Update preview every 1s real-time to avoid freezing the main thread
+    if (realElapsed > 1.0) {
+        const res = this.solver.solve(ship, this.targetBody, simTime, simTime + this.flightTime, this.costates);
+        if (res.converged || res.error < this.error * 2.0) {
+            this.costates = res.costates;
+            this.path = res.path;
+            this.error = res.error;
+            this.estimatedFuelCost = res.fuelCost;
+        }
+        this.lastRealSolveTime = nowReal;
+        this.lastSolveTime = simTime;
+    }
+    
+    // Ensure engines are OFF
+    ship.throttle = 0;
+    ship.usePrecisionIntegration = false;
+  }
+
   _updateOptimal(ship, dt, simTime, timeWarp) {
     const tGo = this.tArrival - simTime;
     
     // 1. Guidance Update (MPC)
-    if (simTime - this.lastSolveTime > GUIDANCE_INTERVAL) {
+    // Throttle: Solve at most every GUIDANCE_INTERVAL sim-seconds, 
+    // AND at most every 1.0 real-seconds if warping.
+    const nowReal = performance.now() * 0.001;
+    const realElapsed = nowReal - this.lastRealSolveTime;
+    const simElapsed = simTime - this.lastSolveTime;
+
+    let shouldSolve = simElapsed > GUIDANCE_INTERVAL;
+    if (timeWarp && timeWarp.factor > 1) {
+        // High warp: limit to ~1Hz real-time frequency
+        shouldSolve = (simElapsed > GUIDANCE_INTERVAL) && (realElapsed > 1.0);
+    }
+
+    if (shouldSolve) {
         // Warm start solver
         const res = this.solver.solve(ship, this.targetBody, simTime, this.tArrival, this.costates);
         if (res.converged || res.error < this.error * 1.5) { // Accept if converged or not wildly worse
             this.costates = res.costates;
             this.path = res.path;
             this.error = res.error;
+            this.estimatedFuelCost = res.fuelCost;
         }
         this.lastSolveTime = simTime;
+        this.lastRealSolveTime = nowReal;
     }
     
     // 2. Control Law
@@ -184,20 +256,22 @@ export class AutopilotManager {
     this.targetAimPt = ship.position.add(cmdAccel.scale(1e6)); // Visual debug
 
     // 3. Terminal Handoff Check
+    const thresholds = this._getDynamicHandoffThresholds(simTime);
     const dist = ship.position.dist(this.system.getPosition(this.targetBody, simTime));
     
     // Switch conditions:
-    // - Time to go is small
-    // - OR Distance is very close (captured in gravity well)
-    // - AND velocity is somewhat matched? (Implicit in BVP)
+    // - Time to go is small AND Distance is close (within SOI/scaled orbit)
+    // - OR Distance is extremely close
+    // - OR Safety Net (Singularity prevention)
     
-    if (tGo < TERMINAL_HANDOFF_TIME || dist < TERMINAL_DIST_THRESHOLD) {
+    const timeCondition = tGo < thresholds.tHandoff;
+    const distCondition = dist < thresholds.rHandoff;
+    const safetyNet = tGo < 10 * dt;
+
+    if ((timeCondition && distCondition) || safetyNet) {
         // Switch to PD
         this.state = AP_STATE.TERMINAL;
-        // Drop high-precision integration to save CPU? 
-        // No, terminal phase needs it even more for stability!
-        // Actually, PD controller works fine with Symplectic Euler usually,
-        // but let's keep precision if we are handling tight orbits.
+        this.path = []; // Immediate clear
     }
     
     // Time Warp Safety
@@ -304,5 +378,84 @@ export class AutopilotManager {
         this.state = AP_STATE.OFF;
         ship.throttle = 0;
     }
+  }
+
+  /**
+   * Propagate costates using the gravity gradient tensor.
+   * Keeps guidance optimal between full BVP re-solve cycles.
+   */
+  _propagateCostates(ship, dt, simTime) {
+    const x = ship.position.x, y = ship.position.y;
+    let lrx = this.costates[0], lry = this.costates[1];
+    let lvx = this.costates[2], lvy = this.costates[3];
+
+    // Compute Gravity Gradient Tensor at ship position
+    let jxx = 0, jxy = 0, jyy = 0;
+
+    for (const body of this.system.gravBodies) {
+        const bPos = this.system.getPosition(body, simTime);
+        const dx = x - bPos.x;
+        const dy = y - bPos.y;
+        const r2 = dx*dx + dy*dy + SOFTENING_SI;
+        const r = Math.sqrt(r2);
+        const r3 = r2 * r;
+        const r5 = r3 * r2;
+        const mu = G_SI * body.mass;
+
+        jxx += -mu * (1.0/r3 - 3*dx*dx/r5);
+        jyy += -mu * (1.0/r3 - 3*dy*dy/r5);
+        jxy += -mu * (     0 - 3*dx*dy/r5);
+    }
+
+    // Costate Derivatives
+    // dlr = -(J * lv)
+    // dlv = -lr
+    const dlrx = -(jxx * lvx + jxy * lvy);
+    const dlry = -(jxy * lvx + jyy * lvy);
+    const dlvx = -lrx;
+    const dlvy = -lry;
+
+    // Euler step (sufficient for guidance between BVP solves)
+    this.costates[0] += dlrx * dt;
+    this.costates[1] += dlry * dt;
+    this.costates[2] += dlvx * dt;
+    this.costates[3] += dlvy * dt;
+  }
+
+  /**
+   * Calculate dynamic handoff thresholds as per Design Guide.
+   */
+  _getDynamicHandoffThresholds(simTime) {
+    const G = 6.674e-11;
+    const target = this.targetBody;
+    
+    // 1. Parking Orbit Radius (R_orbit)
+    const rOrbit = (target.radius || 1000) * 2.0;
+
+    // 2. Sphere of Influence (R_SOI)
+    let rSOI = Infinity;
+    if (target.orbit) {
+        let parentMass = this.system.solara.mass;
+        if (target.orbit.parent) {
+            // Find body owning the parent orbit
+            const parentBody = this.system.allBodies.find(b => b.orbit === target.orbit.parent);
+            if (parentBody) parentMass = parentBody.mass;
+        }
+        rSOI = target.orbit.a * Math.pow(target.mass / parentMass, 0.4);
+    }
+
+    // 3. Orbital Period (T_orbit)
+    // T = 2π * sqrt(r^3 / μ)
+    const mu = G * target.mass;
+    const tOrbit = 2 * Math.PI * Math.sqrt(Math.pow(rOrbit, 3) / (mu || 1e-10));
+
+    // Thresholds:
+    // Distance Metric: min(0.25 * SOI, 10 * R_orbit)
+    const rHandoff = Math.min(0.25 * rSOI, 10 * rOrbit);
+
+    // Time Metric: max(0.5 * T_orbit, 0.05 * t_total)
+    const tHandoff = Math.max(0.5 * tOrbit, 0.05 * this.flightTime);
+
+    return { rHandoff, tHandoff };
   }
 }

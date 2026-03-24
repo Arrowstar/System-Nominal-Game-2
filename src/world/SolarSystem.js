@@ -497,9 +497,13 @@ export class SolarSystem {
       name: body.name,
       mass: body.mass,
       radius: body.radius || 0,
+      orbit: body.orbit,
       getPosition: body.orbit
         ? (t) => body.orbit.getPosition(t)
         : () => Vec2.zero(),  // Solara at origin
+      getVelocity: body.orbit
+        ? (t) => body.orbit.getVelocity(t)
+        : () => Vec2.zero(),
     }));
   }
 
@@ -511,6 +515,16 @@ export class SolarSystem {
   getPosition(body, t) {
     if (!body.orbit) return Vec2.zero();
     return body.orbit.getPosition(t);
+  }
+
+  /**
+   * Get the world-space Vec2 velocity of a body at sim time t.
+   * @param {object} body
+   * @param {number} t
+   */
+  getVelocity(body, t) {
+    if (!body.orbit) return Vec2.zero();
+    return body.orbit.getVelocity(t);
   }
 
   /**

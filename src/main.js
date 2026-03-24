@@ -107,6 +107,7 @@ const careerStats = {
 const npcShips = [];
 
 window.solarSystem = solarSystem;
+solarSystem.gameLoop = loop;
 window.playerShip = playerShip;
 window.playerWallet = playerWallet;
 
@@ -197,6 +198,46 @@ window.orderBoardFulfillJob = (id) => {
 };
 
 const debugEconomyUI = new DebugEconomyUI(document.body, solarSystem);
+
+/**
+ * Dynamically adjust the maximum physics time step based on gravitational proximity.
+ * Helps performance at high warp by taking fewer, larger steps in deep space.
+ */
+function updateAdaptiveTimestep(ship, simTime) {
+  const result = solarSystem.nearestBody(ship.position, simTime);
+  if (!result || !result.body) {
+    loop.maxPhysicsDt = 1.0;
+    return;
+  }
+
+  const body = result.body;
+  const dist = result.distance;
+  
+  // Gravitational time scale heuristic: dt_max = k * sqrt(r^3 / GM)
+  // GM = G * body.mass
+  const G = 6.674e-11;
+  const mu = G * (body.mass || 1e10);
+  
+  // Safety factor: 0.05 is ~5% of an orbit at any given radius.
+  // This is generally very safe for symplectic Euler.
+  const k = 0.05;
+  const tau = Math.sqrt(Math.pow(dist, 3) / mu);
+  let safeDt = k * tau;
+
+  // Clamp:
+  // - Minimum 1.0s (default accuracy)
+  // - Maximum 3600.0s (1 hour - prevents extreme skips even in interstellar space)
+  // - Also limit by total flight time to arrival if autopilot is active?
+  //   Nah, GameLoop sub-stepping handles any overshoots by capping at simDelta.
+  
+  // Extra safety: If we are VERY close to a body (within 3 radii), stick to 1.0s.
+  const bodyRadius = body.radius || 1000;
+  if (dist < 3 * bodyRadius) {
+    safeDt = 1.0;
+  }
+
+  loop.maxPhysicsDt = Math.min(3600, Math.max(1.0, safeDt));
+}
 
 // ─── Game State: Menu ──────────────────────────────────────────────────────
 function buildMainMenu() {
@@ -408,8 +449,11 @@ states.register(STATES.NAV, {
     navComp.update(simTime, dt);
     // ── Ship controls work in NAV too ───────────────────────────────────────
     if (input.consumePressed('KeyC')) {
-      if (autopilot.active) autopilot.disengage();
-      else if (navComp.selectedBody) autopilot.engage(navComp.selectedBody);
+      if (autopilot.active) {
+        autopilot.disengage();
+      } else if (navComp.selectedBody) {
+        autopilot.engage(navComp.selectedBody);
+      }
     }
 
     const rotSpeed = 2.0;
@@ -418,7 +462,13 @@ states.register(STATES.NAV, {
     const manualInput = input.isDown('KeyW') || input.isDown('ArrowUp') || input.isDown('KeyS') || input.isDown('ArrowDown') ||
                         input.isDown('KeyA') || input.isDown('ArrowLeft') || input.isDown('KeyD') || input.isDown('ArrowRight') ||
                         input.consumePressed('KeyZ') || input.consumePressed('KeyX');
-    if (manualInput && autopilot.active) autopilot.disengage();
+    
+    // Manual override: disengage if key is used, but ignore keys held during first 0.25s of engagement
+    if (manualInput && autopilot.active) {
+      if (simTime - autopilot.engageTime > 0.25) {
+        autopilot.disengage();
+      }
+    }
 
     if (input.isDown('KeyA') || input.isDown('ArrowLeft'))  playerShip.heading -= rotSpeed * dt;
     if (input.isDown('KeyD') || input.isDown('ArrowRight')) playerShip.heading += rotSpeed * dt;
@@ -447,6 +497,7 @@ states.register(STATES.NAV, {
 
     orderBoardUI.update();
     debugEconomyUI.update();
+    updateAdaptiveTimestep(playerShip, simTime);
   },
   render: (alpha) => {
     clearCanvas();
@@ -607,14 +658,23 @@ states.register(STATES.TACTICAL, {
       const rotStep = 5 * Math.PI / 180; // 5° per tap
 
       if (input.consumePressed('KeyC')) {
-        if (autopilot.active) autopilot.disengage();
-        else if (navComp.selectedBody) autopilot.engage(navComp.selectedBody);
+        if (autopilot.active) {
+          autopilot.disengage();
+        } else if (navComp.selectedBody) {
+          autopilot.engage(navComp.selectedBody);
+        }
       }
 
       const manualInput = input.isDown('KeyW') || input.isDown('ArrowUp') || input.isDown('KeyS') || input.isDown('ArrowDown') ||
                           input.isDown('KeyA') || input.isDown('ArrowLeft') || input.isDown('KeyD') || input.isDown('ArrowRight') ||
                           input.consumePressed('KeyZ') || input.consumePressed('KeyX');
-      if (manualInput && autopilot.active) autopilot.disengage();
+      
+      // Manual override: disengage if key is used, but ignore keys held during first 0.25s of engagement
+      if (manualInput && autopilot.active) {
+        if (simTime - autopilot.engageTime > 0.25) {
+          autopilot.disengage();
+        }
+      }
 
       if (input.isDown('KeyA') || input.isDown('ArrowLeft')) playerShip.heading -= rotSpeed * dt;
       if (input.isDown('KeyD') || input.isDown('ArrowRight')) playerShip.heading += rotSpeed * dt;
@@ -663,6 +723,7 @@ states.register(STATES.TACTICAL, {
 
     orderBoardUI.update();
     debugEconomyUI.update();
+    updateAdaptiveTimestep(playerShip, simTime);
   },
   render: function (alpha) {
     tacticalView.render(playerShip, loop.simTime, alpha, npcShips);

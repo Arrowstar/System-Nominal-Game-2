@@ -7,16 +7,28 @@ This document outlines the architecture for a real-time, closed-loop guidance sy
 Unlike traditional impulsive maneuvers (e.g., Hohmann transfers), high-thrust continuous-burn trajectories require solving a complex Two-Point Boundary Value Problem (TPBVP) subject to the gravitational pull of multiple bodies. This system utilizes the Indirect Method of Optimal Control to solve this TPBVP dynamically. To account for unmodeled perturbations, the algorithm is wrapped in a Model Predictive Control (MPC) loop, warm-starting the TPBVP solver at a set frequency to provide real-time trajectory updates, before handing off to a critically damped Proportional-Derivative (PD) controller for terminal orbit insertion.
 2. Dynamical Model & Equations of Motion
 The physical environment is generalized to an $N$-body system. The spacecraft state vector is defined as $\mathbf{X} = [\mathbf{r}^T, \mathbf{v}^T]^T \in \mathbb{R}^6$, representing position and velocity in a chosen inertial reference frame.
-2.1 N-Body Gravity Model
+2.1 Canonical Units and System Scaling
+To ensure numerical stability within the TPBVP solver—specifically to prevent the Jacobian matrix from becoming ill-conditioned due to the vast scale differences between interplanetary distances ($10^{11}$ meters) and microscopic costate variables—all physical quantities must be normalized using Canonical Units.
+We define the primary central body (e.g., the Sun or central star) as the reference point for the coordinate system.
+* Distance Unit (DU): A characteristic distance, typically chosen as the initial radial distance of the spacecraft or 1 Astronomical Unit (1 AU).
+* Time Unit (TU): Derived such that the gravitational parameter of the primary body evaluates exactly to 1.
+$$TU = \sqrt{\frac{DU^3}{\mu_{primary\_real}}}$$
+* Velocity Unit (VU): $VU = \frac{DU}{TU}$
+* Acceleration Unit (AccU): $AccU = \frac{DU}{TU^2}$
+Under this canonical scaling scheme, the mathematics are inherently balanced:
+   * $\mu_{primary} = 1.0$
+   * For all secondary bodies, the normalized mass is a ratio: $\mu_i = \frac{\mu_{i\_real}}{\mu_{primary\_real}}$
+All state vectors ($\mathbf{r}, \mathbf{v}$), time variables ($t$), costates ($\lambda$), and equations in this document assume these dimensionless canonical units. External simulation boundaries (UI readouts, engine thrust limits) must be scaled into canonical units prior to integration and scaled back to physical units for display.
+2.2 N-Body Gravity Model
 The spacecraft is subject to the gravitational pull of a central primary body (e.g., a star) and $N-1$ secondary bodies (e.g., planets, moons, comets). The net gravitational acceleration $\mathbf{g}(\mathbf{r}, t)$ at time $t$ is:
 $$\mathbf{g}(\mathbf{r}, t) = -\sum_{i=1}^{N} \frac{\mu_i}{|\mathbf{r} - \mathbf{r}_i(t)|^3} (\mathbf{r} - \mathbf{r}_i(t))$$
 Where:
-* $\mu_i$ is the standard gravitational parameter ($GM$) of the $i$-th body.
-* $\mathbf{r}_i(t)$ is the inertial position of the $i$-th body at time $t$ (provided by an external ephemeris model).
-2.2 Gravity Softening
+   * $\mu_i$ is the canonical gravitational parameter of the $i$-th body.
+   * $\mathbf{r}_i(t)$ is the canonical inertial position of the $i$-th body at time $t$ (provided by an external ephemeris model).
+2.3 Gravity Softening
 To prevent computational singularities (divide-by-zero) if the TPBVP solver's intermediate mathematical guesses pass through the center of a celestial body, a softening parameter $\epsilon$ (typically $10^{-6}$ to $10^{-8}$ depending on the unit scale) is applied to the distance scalar:
 $$d_i = \sqrt{|\mathbf{r} - \mathbf{r}_i(t)|^2 + \epsilon}$$
-2.3 Equations of Motion
+2.4 Equations of Motion
 The kinematics of the spacecraft, subject to thrust acceleration $\mathbf{a}$ and gravity $\mathbf{g}$, are:
 $$\dot{\mathbf{r}} = \mathbf{v}$$$$\dot{\mathbf{v}} = \mathbf{g}(\mathbf{r}, t) + \mathbf{a}$$
 3. Optimal Control Formulation (Indirect Method)
@@ -44,10 +56,10 @@ We drive $\mathbf{E} \to 0$ using a multidimensional Newton-Raphson root-finding
 4.2 Numerical Jacobian Construction
 Because the gravity gradient tensor makes the system highly non-linear, analytical Jacobians are complex and brittle. We construct the Jacobian matrix $J \in \mathbb{R}^{6 \times 6}$ numerically using forward finite differences.
 For each component $j \in \{1, 2, ..., 6\}$ of the initial costate vector $\mathbf{\lambda}_0$:
-1. Perturb the component by a small $\epsilon_{diff} \approx 10^{-5}$: $\mathbf{\lambda}_{0, pert} = \mathbf{\lambda}_0 + \epsilon_{diff} \mathbf{\hat{e}}_j$
-2. Integrate the full 12-state system from $t_0$ to $t_f$ using $\mathbf{\lambda}_{0, pert}$.
-3. Calculate the perturbed error $\mathbf{E}_{pert}$.
-4. The $j$-th column of $J$ is: $\frac{\mathbf{E}_{pert} - \mathbf{E}_{base}}{\epsilon_{diff}}$
+   1. Perturb the component by a small $\epsilon_{diff} \approx 10^{-5}$: $\mathbf{\lambda}_{0, pert} = \mathbf{\lambda}_0 + \epsilon_{diff} \mathbf{\hat{e}}_j$
+   2. Integrate the full 12-state system from $t_0$ to $t_f$ using $\mathbf{\lambda}_{0, pert}$.
+   3. Calculate the perturbed error $\mathbf{E}_{pert}$.
+   4. The $j$-th column of $J$ is: $\frac{\mathbf{E}_{pert} - \mathbf{E}_{base}}{\epsilon_{diff}}$
 4.3 Newton-Raphson Update Step
 With $\mathbf{E}_{base}$ and $J$ calculated, we solve the linear system for the required costate adjustment $\Delta \mathbf{\lambda}_0$:
 $$J \cdot \Delta \mathbf{\lambda}_0 = \mathbf{E}_{base}$$
@@ -61,50 +73,50 @@ Given time of flight $T = t_f - t_0$, displacement $\Delta \mathbf{r} = \mathbf{
 $$\mathbf{c}_1 = \frac{12}{T^3} \left( \frac{\Delta \mathbf{v} T}{2} - \Delta \mathbf{r} + \mathbf{v}_0 T \right)$$$$\mathbf{c}_0 = \frac{\Delta \mathbf{v}}{T} - \frac{\mathbf{c}_1 T}{2}$$
 Because $\mathbf{a}(t) = -\mathbf{\lambda}_v(t)$ and $\dot{\mathbf{a}}(t) = -\dot{\mathbf{\lambda}}_v(t) = \mathbf{\lambda}_r(t)$:
 The mathematically sound initial guess for the costates is:
-* $\mathbf{\lambda}_{v0} = -\mathbf{c}_0$
-* $\mathbf{\lambda}_{r0} = \mathbf{c}_1$
+   * $\mathbf{\lambda}_{v0} = -\mathbf{c}_0$
+   * $\mathbf{\lambda}_{r0} = \mathbf{c}_1$
 6. Closed-Loop Model Predictive Control (MPC)
 In a real environment, perturbations (sensor noise, actuator latency, unmodeled physics) will cause the spacecraft to deviate from the optimal path. The guidance system handles this by constantly running the TPBVP solver in a closed loop.
 6.1 Guidance Tick Execution
 At a defined Guidance Rate (e.g., 1 Hz to 10 Hz):
-1. Sample the true, current physical state of the spacecraft $\mathbf{X}_{true}(t_{now})$.
-2. Warm Start: Initialize the TPBVP solver using the $\mathbf{\lambda}$ vector from the previous guidance cycle (propagated to $t_{now}$).
-3. Because the state has barely deviated, the Newton-Raphson solver converges in 1 to 2 iterations, easily executing within the physical time step constraint.
-4. Extract the updated $\mathbf{\lambda}_v$ and command the engines: $\mathbf{a}_{cmd} = -\mathbf{\lambda}_v$.
+   1. Sample the true, current physical state of the spacecraft $\mathbf{X}_{true}(t_{now})$.
+   2. Warm Start: Initialize the TPBVP solver using the $\mathbf{\lambda}$ vector from the previous guidance cycle (propagated to $t_{now}$).
+   3. Because the state has barely deviated, the Newton-Raphson solver converges in 1 to 2 iterations, easily executing within the physical time step constraint.
+   4. Extract the updated $\mathbf{\lambda}_v$ and command the engines: $\mathbf{a}_{cmd} = -\mathbf{\lambda}_v$.
 7. Terminal Guidance Phase
 As $t_{now} \to t_f$, the time-to-go $T \to 0$. The TPBVP solver approaches a mathematical singularity (infinite required acceleration to correct infinitesimal errors).
 To prevent catastrophic control divergence, the MPC loop monitors $T$. When $T \le T_{handoff}$ (e.g., 2.0 days), the system suspends the Optimal Control solver and transitions to a Proportional-Derivative (PD) Terminal Controller.
 7.1 Critically Damped PD Controller
 The PD controller tracks the target's exact 6D state, acting as an artificial, super-stiff gravity well to snap the spacecraft into the final parking orbit and maintain station-keeping indefinitely.
 Error terms:
-* $\mathbf{r}_{err} = \mathbf{r}_{tgt}(t) - \mathbf{r}_{ship}(t)$
-* $\mathbf{v}_{err} = \mathbf{v}_{tgt}(t) - \mathbf{v}_{ship}(t)$
+   * $\mathbf{r}_{err} = \mathbf{r}_{tgt}(t) - \mathbf{r}_{ship}(t)$
+   * $\mathbf{v}_{err} = \mathbf{v}_{tgt}(t) - \mathbf{v}_{ship}(t)$
 Control Law:
 $$\mathbf{a}_{cmd} = K_p \mathbf{r}_{err} + K_d \mathbf{v}_{err}$$
 Tuning for Critical Damping ($\zeta = 1$):
 To prevent tracking overshoot, the gains must satisfy $K_d = 2\sqrt{K_p}$. High stiffness is required to overpower local $N$-body gravity during orbit insertion.
-* Recommended Proportional Gain: $K_p \ge 10000.0$
-* Recommended Derivative Gain: $K_d = 2\sqrt{K_p} = 200.0$
+   * Recommended Proportional Gain: $K_p \ge 10000.0$
+   * Recommended Derivative Gain: $K_d = 2\sqrt{K_p} = 200.0$
 (Implementation Note: Hard-cap the magnitude of $\mathbf{a}_{cmd}$ during this phase to the spacecraft's physical maximum thrust capabilities to prevent numerical explosion if handoff error is large).
 8. Target-Relative Orbital Mechanics (Telemetry)
 For telemetry and insertion verification, the Cartesian state is converted to Keplerian elements relative to the primary target body.
 Let relative state be $\mathbf{r}_{rel} = \mathbf{r}_{ship} - \mathbf{r}_{tgt}$ and $\mathbf{v}_{rel} = \mathbf{v}_{ship} - \mathbf{v}_{tgt}$.
 Let $r = |\mathbf{r}_{rel}|$ and $v = |\mathbf{v}_{rel}|$.
-1. Specific Angular Momentum: $\mathbf{h} = \mathbf{r}_{rel} \times \mathbf{v}_{rel}$
-2. Eccentricity Vector: $\mathbf{e} = \frac{\mathbf{v}_{rel} \times \mathbf{h}}{\mu_{tgt}} - \frac{\mathbf{r}_{rel}}{r}$
-3. Scalar Eccentricity: $ecc = |\mathbf{e}|$
-4. Specific Orbital Energy: $\xi = \frac{v^2}{2} - \frac{\mu_{tgt}}{r}$
-5. Semi-Major Axis: $a = -\frac{\mu_{tgt}}{2\xi}$ (If $\xi > 0$, orbit is hyperbolic and $a < 0$).
-6. Periapsis/Apoapsis: $R_p = a(1 - ecc)$, $R_a = a(1 + ecc)$ (If $ecc \ge 1$, $R_a = \infty$).
-7. Inclination: $i = \cos^{-1}\left( \frac{h_z}{|\mathbf{h}|} \right)$
-8. Longitude of Ascending Node ($\Omega$): Let $\mathbf{n} = [0,0,1]^T \times \mathbf{h}$. $\Omega = \cos^{-1}\left( \frac{n_x}{|\mathbf{n}|} \right)$ (If $n_y < 0$, $\Omega = 360^\circ - \Omega$).
-9. Argument of Periapsis ($\omega$): $\omega = \cos^{-1}\left( \frac{\mathbf{n} \cdot \mathbf{e}}{|\mathbf{n}| ecc} \right)$ (If $e_z < 0$, $\omega = 360^\circ - \omega$).
+   1. Specific Angular Momentum: $\mathbf{h} = \mathbf{r}_{rel} \times \mathbf{v}_{rel}$
+   2. Eccentricity Vector: $\mathbf{e} = \frac{\mathbf{v}_{rel} \times \mathbf{h}}{\mu_{tgt}} - \frac{\mathbf{r}_{rel}}{r}$
+   3. Scalar Eccentricity: $ecc = |\mathbf{e}|$
+   4. Specific Orbital Energy: $\xi = \frac{v^2}{2} - \frac{\mu_{tgt}}{r}$
+   5. Semi-Major Axis: $a = -\frac{\mu_{tgt}}{2\xi}$ (If $\xi > 0$, orbit is hyperbolic and $a < 0$).
+   6. Periapsis/Apoapsis: $R_p = a(1 - ecc)$, $R_a = a(1 + ecc)$ (If $ecc \ge 1$, $R_a = \infty$).
+   7. Inclination: $i = \cos^{-1}\left( \frac{h_z}{|\mathbf{h}|} \right)$
+   8. Longitude of Ascending Node ($\Omega$): Let $\mathbf{n} = [0,0,1]^T \times \mathbf{h}$. $\Omega = \cos^{-1}\left( \frac{n_x}{|\mathbf{n}|} \right)$ (If $n_y < 0$, $\Omega = 360^\circ - \Omega$).
+   9. Argument of Periapsis ($\omega$): $\omega = \cos^{-1}\left( \frac{\mathbf{n} \cdot \mathbf{e}}{|\mathbf{n}| ecc} \right)$ (If $e_z < 0$, $\omega = 360^\circ - \omega$).
 9. Numerical Integration Scheme
 The system relies heavily on numerical integration to propagate the 12-state vector (or 6-state during terminal guidance). Because $N$-body gravity gradients change rapidly near planetary bodies, a 4th-Order Runge-Kutta (RK4) method is the minimum required standard.
 Given the state vector $\mathbf{Y}$ and a derivative function $\dot{\mathbf{Y}} = f(t, \mathbf{Y})$, for a step size $\Delta t$:
-1. $\mathbf{k}_1 = f(t, \mathbf{Y})$
-2. $\mathbf{k}_2 = f(t + \frac{\Delta t}{2}, \mathbf{Y} + \mathbf{k}_1 \frac{\Delta t}{2})$
-3. $\mathbf{k}_3 = f(t + \frac{\Delta t}{2}, \mathbf{Y} + \mathbf{k}_2 \frac{\Delta t}{2})$
-4. $\mathbf{k}_4 = f(t + \Delta t, \mathbf{Y} + \mathbf{k}_3 \Delta t)$
+   1. $\mathbf{k}_1 = f(t, \mathbf{Y})$
+   2. $\mathbf{k}_2 = f(t + \frac{\Delta t}{2}, \mathbf{Y} + \mathbf{k}_1 \frac{\Delta t}{2})$
+   3. $\mathbf{k}_3 = f(t + \frac{\Delta t}{2}, \mathbf{Y} + \mathbf{k}_2 \frac{\Delta t}{2})$
+   4. $\mathbf{k}_4 = f(t + \Delta t, \mathbf{Y} + \mathbf{k}_3 \Delta t)$
 $$\mathbf{Y}_{new} = \mathbf{Y} + \frac{\Delta t}{6} (\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)$$
 Implementation Note: For real-time applications, fixed-step RK4 is preferred for deterministic execution times. If extreme precision is required near planetary centers, an adaptive scheme (e.g., RK45 / Dormand-Prince) may be substituted, provided the integration does not violate the real-time constraint of the MPC loop.

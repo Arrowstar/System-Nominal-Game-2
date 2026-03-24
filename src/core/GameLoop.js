@@ -27,6 +27,7 @@ export class GameLoop {
     this._accumulator = 0;
     this._simTime  = 0;      // total simulated time in seconds (affected by time-warp)
     this._warpFactor = 1;    // set by TimeWarp module
+    this.maxPhysicsDt = 1.0; // dynamic limit for individual physics steps
   }
 
   get simTime()    { return this._simTime; }
@@ -66,13 +67,12 @@ export class GameLoop {
     // If accumulator is small (1x warp), we take one small step.
     // If accumulator is large (1000x warp), we take multiple 1.0s steps.
     
-    const MAX_PHYS_DT = 1.0; 
     const MAX_STEPS = 200; // Safety cap to prevent freeze
     let steps = 0;
 
     while (this._accumulator > 0 && steps < MAX_STEPS) {
         let currentDt = this._accumulator;
-        if (currentDt > MAX_PHYS_DT) currentDt = MAX_PHYS_DT;
+        if (currentDt > this.maxPhysicsDt) currentDt = this.maxPhysicsDt;
 
         this._update(currentDt, this._simTime);
         this._simTime += currentDt;

@@ -770,7 +770,8 @@ export class NavComputer {
         'COAST': '#777777',  // Grey
         'BRAKE': '#00d2ff',  // Cyan
         'HOLD':  '#39ff14',  // Green
-        'OFF':   '#39ff14'   // Default
+        'OFF':   '#39ff14',   // Default
+        'OPTIMAL': '#ffb000' // Yellow-orange guidance
       };
 
       let currentPathState = pts[0].apState;

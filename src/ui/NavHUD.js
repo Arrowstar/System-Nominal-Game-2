@@ -647,10 +647,19 @@ export class NavHUD {
           opacity:0.85;
         " />
         <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;">
-          <span style="color:#8b949e;">EST. FUEL</span>
-          <span id="ap-fuel-est" style="color:#00d4ff;font-weight:600;">— kg</span>
+          <span style="color:#8b949e;">RES. FUEL</span>
+          <span id="ap-fuel-res" style="color:#fff;">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px;">
+          <span style="color:#8b949e;">EST. COST</span>
+          <span id="ap-fuel-est" style="color:#00d4ff;font-weight:600;">—</span>
         </div>
       </div>
+      <button id="ap-toggle-btn" class="btn interactive" style="
+        margin-top: 8px; width: 100%; padding: 10px; background: rgba(57,255,20,0.1);
+        border: 1px solid #39ff14; color: #39ff14; font-weight: 700; cursor: pointer;
+        text-transform: uppercase; letter-spacing: 0.1em;
+      ">ENGAGE</button>
     `;
 
     // Wire up slider to autopilot efficiency
@@ -660,6 +669,17 @@ export class NavHUD {
         this.autopilot.setEfficiency(parseInt(slider.value) / 100);
       }
     });
+
+    // Toggle button
+    const toggleBtn = this.apPanelContent.querySelector('#ap-toggle-btn');
+    toggleBtn.onclick = () => {
+        if (!this.autopilot) return;
+        if (this.autopilot.isExecuting) {
+            this.autopilot.disengage();
+        } else {
+            this.autopilot.execute();
+        }
+    };
     // Prevent keyboard events on slider from propagating to game controls
     slider.addEventListener('keydown', (e) => e.stopPropagation());
     slider.addEventListener('keyup', (e) => e.stopPropagation());
@@ -724,6 +744,29 @@ export class NavHUD {
     if (fuelEst > 1000) fuelStr = `${(fuelEst / 1000).toFixed(1)}t`;
     else fuelStr = `${Math.round(fuelEst)} kg`;
     this.apPanelContent.querySelector('#ap-fuel-est').textContent = fuelStr;
+
+    // Current Fuel Remaining
+    const fuelRem = this.ship.fuel;
+    const fuelMax = this.ship.maxFuel;
+    const fuelPct = fuelMax > 0 ? (fuelRem / fuelMax) * 100 : 0;
+    let remStr;
+    if (fuelRem > 1000) remStr = `${(fuelRem / 1000).toFixed(1)}t`;
+    else remStr = `${Math.round(fuelRem)} kg`;
+    this.apPanelContent.querySelector('#ap-fuel-res').textContent = `${remStr} (${fuelPct.toFixed(0)}%)`;
+
+    // Toggle Button State
+    const toggleBtn = this.apPanelContent.querySelector('#ap-toggle-btn');
+    if (ap.isExecuting) {
+        toggleBtn.textContent = 'DISENGAGE';
+        toggleBtn.style.background = 'rgba(255, 0, 63, 0.1)';
+        toggleBtn.style.borderColor = '#ff003f';
+        toggleBtn.style.color = '#ff003f';
+    } else {
+        toggleBtn.textContent = 'EXECUTE';
+        toggleBtn.style.background = 'rgba(57, 255, 20, 0.1)';
+        toggleBtn.style.borderColor = '#39ff14';
+        toggleBtn.style.color = '#39ff14';
+    }
   }
 
   // ─── Tri-Bar Resource Monitor (right side) ────────────────────────────────
