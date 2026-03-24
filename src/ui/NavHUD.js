@@ -634,14 +634,42 @@ export class NavHUD {
         <span style="color:#8b949e;">ΔV REQ</span>
         <span id="ap-dv" style="font-weight:600;">—</span>
       </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:9px;letter-spacing:0.08em;margin-bottom:4px;">
+          <span style="color:#ff3333;">SPEED</span>
+          <span id="ap-eff-label" style="color:#8b949e;">0%</span>
+          <span style="color:#39ff14;">ECONOMY</span>
+        </div>
+        <input id="ap-eff-slider" type="range" min="0" max="100" value="0" style="
+          width:100%; height:6px; -webkit-appearance:none; appearance:none;
+          background:linear-gradient(to right, #ff3333, #ffbf00 50%, #39ff14);
+          border-radius:3px; outline:none; cursor:pointer; pointer-events:all;
+          opacity:0.85;
+        " />
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;">
+          <span style="color:#8b949e;">EST. FUEL</span>
+          <span id="ap-fuel-est" style="color:#00d4ff;font-weight:600;">— kg</span>
+        </div>
+      </div>
     `;
+
+    // Wire up slider to autopilot efficiency
+    const slider = this.apPanelContent.querySelector('#ap-eff-slider');
+    slider.addEventListener('input', () => {
+      if (this.autopilot) {
+        this.autopilot.setEfficiency(parseInt(slider.value) / 100);
+      }
+    });
+    // Prevent keyboard events on slider from propagating to game controls
+    slider.addEventListener('keydown', (e) => e.stopPropagation());
+    slider.addEventListener('keyup', (e) => e.stopPropagation());
     
     this.apPanel = this.hudManager.createPanel({
       id: 'nav-autopilot',
       title: 'AUTOPILOT',
       defaultZone: 'top-right',
       contentEl: this.apPanelContent,
-      minWidth: '220px',
+      minWidth: '240px',
       borderColor: 'rgba(57, 255, 20, 0.25)'
     });
     this.apPanel.style.display = 'none';
@@ -670,6 +698,7 @@ export class NavHUD {
     switch (ap.state) {
       case 'ALIGN': stateColor = '#ffb000'; break;
       case 'ACCEL': stateColor = '#ff3333'; break;
+      case 'COAST': stateColor = '#00d4ff'; break;
       case 'BRAKE': stateColor = '#39ff14'; break;
       case 'HOLD':  stateColor = '#00ffff'; break;
     }
@@ -679,6 +708,22 @@ export class NavHUD {
     this.apPanelContent.querySelector('#ap-target').textContent = targetName;
     this.apPanelContent.querySelector('#ap-eta').textContent = formatTime(ap.eta);
     this.apPanelContent.querySelector('#ap-dv').textContent = (ap.dvRemaining).toFixed(1) + ' m/s';
+
+    // Update efficiency slider and fuel estimate
+    const slider = this.apPanelContent.querySelector('#ap-eff-slider');
+    const effPct = Math.round(ap.efficiency * 100);
+    // Only update slider if user isn't dragging it (avoid fighting the user)
+    if (document.activeElement !== slider) {
+      slider.value = effPct;
+    }
+    this.apPanelContent.querySelector('#ap-eff-label').textContent = `${effPct}%`;
+
+    // Fuel estimate
+    const fuelEst = ap.estimatedFuelCost;
+    let fuelStr;
+    if (fuelEst > 1000) fuelStr = `${(fuelEst / 1000).toFixed(1)}t`;
+    else fuelStr = `${Math.round(fuelEst)} kg`;
+    this.apPanelContent.querySelector('#ap-fuel-est').textContent = fuelStr;
   }
 
   // ─── Tri-Bar Resource Monitor (right side) ────────────────────────────────

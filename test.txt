@@ -1,0 +1,29 @@
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mC:/Users/Adam/Dropbox/Documents/homework/Personal Projects/System Nominal Game[39m
+
+ [31m❯[39m src/navigation/__tests__/autopilot.test.js [2m([22m[2m19 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 15[2mms[22m[39m
+       [32m✓[39m transitions to BRAKE earlier when approaching a massive body[32m 3[2mms[22m[39m
+       [32m✓[39m BRAKE_SAFETY factor is >= 1.15[32m 0[2mms[22m[39m
+       [32m✓[39m _circularOrbitSpeed returns correct orbital velocity[32m 0[2mms[22m[39m
+       [32m✓[39m returns 0 for tiny bodies with negligible mass[32m 0[2mms[22m[39m
+       [32m✓[39m arrival distance scales with body radius[32m 0[2mms[22m[39m
+       [32m✓[39m returns null when no bodies are in the way[32m 0[2mms[22m[39m
+       [32m✓[39m steers away when the sun is directly in the flight path[32m 0[2mms[22m[39m
+       [32m✓[39m steers away when the sun is slightly off the flight path[32m 0[2mms[22m[39m
+       [32m✓[39m does not avoid the target body itself[32m 0[2mms[22m[39m
+       [32m✓[39m ignores low-mass bodies[32m 0[2mms[22m[39m
+       [32m✓[39m engage sets state to ALIGN and stores target[32m 0[2mms[22m[39m
+       [32m✓[39m disengage resets all state[32m 0[2mms[22m[39m
+       [32m✓[39m setEfficiency clamps to [0, 1] and defaults to 0[32m 0[2mms[22m[39m
+       [32m✓[39m COAST state is defined in AP_STATE[32m 0[2mms[22m[39m
+[31m       [31m×[31m ACCEL transitions to COAST when closing rate exceeds target coast speed[39m[32m 6[2mms[22m[39m
+       [32m✓[39m COAST phase sets throttle to 0[32m 2[2mms[22m[39m
+       [32m✓[39m braking phase uses non-zero throttle regardless of efficiency[32m 1[2mms[22m[39m
+       [32m✓[39m at efficiency=0, no coast phase occurs[32m 0[2mms[22m[39m
+       [32m✓[39m estimatedFuelCost is populated during active autopilot[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m18 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 21:01:36
+[2m   Duration [22m 214ms[2m (transform 43ms, setup 0ms, import 62ms, tests 15ms, environment 0ms)[22m
+

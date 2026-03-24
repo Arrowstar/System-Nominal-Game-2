@@ -60,25 +60,39 @@ export class GameLoop {
     const simDelta  = realDelta * this._warpFactor;
     this._accumulator += simDelta;
 
-    // Fixed-step physics updates
-    // Cap maximum iterations per frame to prevent browser freeze at high warp.
-    // If we need more than 120 steps, we scale up the step size instead.
-    let steps = Math.floor(this._accumulator / PHYSICS_DT);
-    let current_dt = PHYSICS_DT;
+    // Adaptive Sub-Stepping
+    // We consume the accumulator in steps.
+    // User Requirement: Max time step of 1.0s.
+    // If accumulator is small (1x warp), we take one small step.
+    // If accumulator is large (1000x warp), we take multiple 1.0s steps.
+    
+    const MAX_PHYS_DT = 1.0; 
+    const MAX_STEPS = 200; // Safety cap to prevent freeze
+    let steps = 0;
 
-    if (steps > 120) {
-      current_dt = this._accumulator / 120;
-      steps = 120;
+    while (this._accumulator > 0 && steps < MAX_STEPS) {
+        let currentDt = this._accumulator;
+        if (currentDt > MAX_PHYS_DT) currentDt = MAX_PHYS_DT;
+
+        this._update(currentDt, this._simTime);
+        this._simTime += currentDt;
+        this._accumulator -= currentDt;
+        steps++;
+        
+        // Tiny epsilon check to prevent infinite loops on float errors
+        if (this._accumulator < 1e-6) this._accumulator = 0;
     }
 
-    for (let i = 0; i < steps; i++) {
-      this._update(current_dt, this._simTime);
-      this._simTime     += current_dt;
-      this._accumulator -= current_dt;
+    if (this._accumulator > 0) {
+        // We hit the step limit. Discard the rest to prevent spiral of death.
+        // This means the simulation runs slower than requested warp, but keeps the UI responsive.
+        this._accumulator = 0;
     }
 
     // Render with interpolation factor
-    const alpha = this._accumulator / PHYSICS_DT;
-    this._render(alpha);
+    // Since we drain the accumulator (mostly), alpha is close to 0 or 1.
+    // For adaptive variable steps, interpolation is tricky. 
+    // We'll just render the current state (alpha = 1).
+    this._render(1.0);
   }
 }

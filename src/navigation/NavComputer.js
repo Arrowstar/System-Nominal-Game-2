@@ -84,7 +84,7 @@ export class NavComputer {
   // ─── Public API ──────────────────────────────────────────────────────────────
 
   render(simTime, alpha, autopilot, npcShips = []) {
-    this._syncTrajectory(simTime);
+    this._syncTrajectory(simTime, autopilot);
 
     const ctx = this.ctx;
     ctx.save();
@@ -95,7 +95,7 @@ export class NavComputer {
     this._drawOrbitalTrails(simTime);
     this._drawBodies(simTime);
     this._drawPlayerOrbit(simTime);
-    this._drawGhostPath();
+    this._drawGhostPath(autopilot);
     this._drawShip(alpha);
     this._drawNpcs(alpha, npcShips);
     this._drawNodes(simTime);
@@ -113,10 +113,10 @@ export class NavComputer {
     this._drawBodyLabels(simTime);
   }
 
-  _syncTrajectory(simTime) {
+  _syncTrajectory(simTime, autopilot) {
     // Recompute trajectory once per render frame so it smoothly anchors to the ship's live physics state
     this.trajectory.invalidate();
-    this.trajectory.update(this.ship, simTime, this.nodes);
+    this.trajectory.update(this.ship, simTime, this.nodes, autopilot);
 
     // Sync active widget position to the newly computed ghost path
     if (this.widget.activeNode) {
@@ -731,32 +731,81 @@ export class NavComputer {
 
   // ─── Ghost Path ───────────────────────────────────────────────────────────────
 
-  _drawGhostPath() {
-    const pts = this.trajectory.points;
-    if (pts.length < 2) return;
+  _drawGhostPath(autopilot) {
+    let pts = this.trajectory.points;
+    let ptsLen = this.trajectory.pointsLength || pts.length;
+
+    // Use autopilot path if available and active (shows the guidance plan)
+    if (autopilot && autopilot.active && autopilot.path && autopilot.path.length > 1) {
+      pts = autopilot.path;
+      ptsLen = pts.length;
+    }
+
+    if (ptsLen < 2) return;
 
     const ctx = this.ctx;
 
-    // Draw dashed green prediction line
-    ctx.strokeStyle = '#39ff14';
+    const isAutopilot = autopilot && autopilot.active;
+
     ctx.lineWidth = 2;
     ctx.globalAlpha = 0.75;
     ctx.setLineDash(GHOST_DASH);
 
-    ctx.beginPath();
-    const sShip = this.camera.worldToScreen(this.ship.position.x, this.ship.position.y);
-    ctx.moveTo(sShip.x, sShip.y);
-    for (let i = 0; i < pts.length; i++) {
-      const p = this.camera.worldToScreen(pts[i].pos.x, pts[i].pos.y);
-      ctx.lineTo(p.x, p.y);
+    // Draw prediction line
+    if (!isAutopilot) {
+      ctx.strokeStyle = '#39ff14'; // Green for manual nodes
+      ctx.beginPath();
+      const sShip = this.camera.worldToScreen(this.ship.position.x, this.ship.position.y);
+      ctx.moveTo(sShip.x, sShip.y);
+      for (let i = 0; i < ptsLen; i++) {
+        const p = this.camera.worldToScreen(pts[i].pos.x, pts[i].pos.y);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    } else {
+      // Draw autopilot path with color-coded states
+      const stateColors = {
+        'ACCEL': '#ff7800',  // Orange
+        'ALIGN': '#ff7800',  // Orange
+        'COAST': '#777777',  // Grey
+        'BRAKE': '#00d2ff',  // Cyan
+        'HOLD':  '#39ff14',  // Green
+        'OFF':   '#39ff14'   // Default
+      };
+
+      let currentPathState = pts[0].apState;
+      ctx.strokeStyle = stateColors[currentPathState] || '#ffbf00';
+      ctx.beginPath();
+      
+      const sShip = this.camera.worldToScreen(this.ship.position.x, this.ship.position.y);
+      ctx.moveTo(sShip.x, sShip.y);
+
+      for (let i = 0; i < ptsLen; i++) {
+        const pt = pts[i];
+        const p = this.camera.worldToScreen(pt.pos.x, pt.pos.y);
+        
+        if (pt.apState !== currentPathState) {
+          // Finish the current path segment and start a new one
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+          
+          currentPathState = pt.apState;
+          ctx.strokeStyle = stateColors[currentPathState] || '#ffbf00';
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+        } else {
+          ctx.lineTo(p.x, p.y);
+        }
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
 
     // Hover Highlight
     const mousePos = this.input.mouse;
     let closestPt = null;
     let minDist = 30;
-    for (const p of pts) {
+    for (let i = 0; i < ptsLen; i++) {
+      const p = pts[i];
       const sPos = this.camera.worldToScreen(p.pos.x, p.pos.y);
       const d = new Vec2(mousePos.x, mousePos.y).dist(sPos);
       if (d < minDist) {

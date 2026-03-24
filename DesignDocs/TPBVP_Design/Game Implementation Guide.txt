@@ -1,0 +1,73 @@
+﻿Game Implementation Guide: Torch Drive Mechanics
+Document Type: Game Architecture & Mechanics Specification
+Subsystem: Simulation Loop, Time Warp, and Resource Management
+Context: Adapting Continuous-Thrust Optimal Control for a Video Game Engine
+1. The Time Warp Problem
+In standard 1x time, the Model Predictive Control (MPC) loop calculates physics using small $\Delta t$ steps (e.g., 0.02s per frame). When a player engages 100x or 1000x time warp, the apparent $\Delta t$ per visual frame becomes massive.
+If you feed a massive time step (e.g., $\Delta t = 200\text{s}$) directly into a 4th-Order Runge-Kutta (RK4) integrator inside a deep gravity well, the mathematical error explodes. The ship will literally clip through planets or be launched out of the solar system.
+1.1 Physics Sub-Stepping (Primary Approach)
+To keep the ship "live" and actively running its closed-loop MPC guidance during time warp, the game must decouple the visual framerate from the physics framerate using Physics Sub-Stepping.
+1. Decoupled Integration: Instead of increasing the $\Delta t$ parameter passed to the RK4 integrator, the physics engine maintains a strict, mathematically safe internal time step (e.g., $\Delta t_{phys} = 0.02\text{s}$).
+2. Looping per Frame: If the game is running at 100x time warp at 60 FPS, exactly 1.66 seconds of simulation time must pass per visual frame. The physics engine executes a tight while loop, running the RK4 step $\approx 83$ times per visual frame to catch up to the visual time.
+3. Live MPC Updates: Because the physics remain continuous, the MPC Guidance Computer can continue to poll the state and warm-start the Boundary Value Problem (BVP) solver at its regular interval (e.g., every 50 physics steps), allowing the ship to dynamically react to perturbations even during time warp.
+1.2 The "On-Rails" Spline Fallback (Performance Optimization)
+Physics sub-stepping is CPU-intensive. If the game design requires extreme, interplanetary time warps (e.g., 10,000x or 100,000x), executing 8,000 RK4 steps per visual frame will bottleneck the main thread. If profiling indicates unacceptable CPU load, the engine should gracefully fallback to an "On-Rails" system:
+1. Pre-Calculation (Background Thread): The BVP solver integrates the entire flight path using a safe $\Delta t$ in a background thread and constructs a Catmull-Rom Spline.
+2. Engaging the Rails: The live MPC loop and physics components are disabled. The main thread simply interpolates the ship's position, velocity, and mass along the pre-calculated spline based on CurrentSimulationTime.
+3. Dropping out of Warp: If time warp is reduced, or a perturbation occurs, the ship comes "off rails" and the live MPC loop re-engages using sub-stepping.
+2. Integrating Variable Mass and Specific Impulse ($I_{sp}$)
+In reality, a ship's mass decreases as it burns propellant. Because acceleration $\mathbf{a} = \mathbf{F}_{thrust} / m(t)$, a lighter ship accelerates faster for the same engine power.
+2.1 State Vector Expansion
+You must expand the state vector from 6 dimensions to 7 dimensions to include mass: $\mathbf{X} = [x, y, z, v_x, v_y, v_z, m]^T$.
+The differential equation for mass, based on the commanded acceleration magnitude $|\mathbf{a}|$ and the engine's exhaust velocity $V_e$ (where $V_e = I_{sp} \cdot g_0$), is:
+$$\dot{m} = - \frac{m(t) \cdot |\mathbf{a}|}{V_e}$$
+2.2 Updating the Integrator
+Inside your rk4Step function, you simply add the mass derivative. When the TPBVP solver calculates a forward pass, it will naturally account for the fact that the ship gets lighter (and thus requires less thrust force to achieve the required acceleration) as it approaches the destination.
+3. Handling Fixed Engine Thrust Limits ($F_{max}$)
+Our current mathematical model assumes the ship can produce whatever acceleration $\mathbf{a}_{opt} = -\mathbf{\lambda}_v$ is required. In a game, engines have a maximum thrust force $F_{max}$. The maximum possible acceleration at any given time is $\mathbf{a}_{max} = F_{max} / m(t)$.
+3.1 The Game-Dev Approximation (Clamping)
+The mathematically rigorous way to handle this is to reformulate the Hamiltonian using Pontryagin's Minimum Principle with bounded controls, which results in "Bang-Bang" control (engines are either at 100% or 0% in coasting phases). However, solving bounded-control TPBVPs is notoriously unstable and slow—bad for games.
+The accepted "game dev" approximation is to stick with our smooth energy-optimal curve, but clamp the acceleration at the physics level:
+$$\mathbf{a}_{cmd} = -\mathbf{\lambda}_v$$$$|\mathbf{a}_{cmd}| = \min\left( |-\mathbf{\lambda}_v|, \frac{F_{max}}{m(t)} \right)$$
+3.2 The UX Solution: Validating Flight Times
+Because of clamping, if a player asks for a 5-day transfer to Jupiter, the TPBVP will demand $1000 \text{ m/s}^2$ of acceleration. The engine will clamp it to $10 \text{ m/s}^2$, and the ship will wildly miss the target.
+The game must prevent this at the UI level.
+1. When the player selects a destination, provide a "Time of Flight" slider.
+2. The UI runs a fast, low-res BVP solver in the background as the slider moves.
+3. It checks the maximum required acceleration against the ship's $F_{max} / m_0$.
+4. If the required acceleration exceeds the ship's capabilities, the UI highlights the trajectory in red and prevents the player from launching, stating: "Engine Thrust Insufficient for this Transfer Time." 5. The player must increase the Time of Flight slider until the required thrust drops below their ship's $F_{max}$.
+4. Game Engine Architecture Summary
+To implement this without tanking your framerate, use the following multi-threaded architecture:
+* Main Thread (Unity/Unreal/Custom):
+   * Handles rendering, UI, and time tracking.
+   * Manages the active Physics Sub-Stepping while loop.
+   * Runs the Terminal PD Controller (cheap math) when ships are in final orbit insertion.
+* Navigation Thread Pool (Worker Threads):
+   * Route Plotting: Whenever a player plots a route, a worker thread runs the full TPBVP solver to preview the trajectory and validate it mathematically without stuttering the game.
+   * MPC Offloading: For active ships, the BVP warm-start matrix calculations can be handed to a worker thread. It takes the current state, solves the Newton-Raphson step, and returns the updated costates ($\lambda$) to the Main Thread for the next batch of sub-steps.
+* Fuel Depletion Check (Pre-Flight):
+   * Even with live physics, the game must pre-validate resources before launch. A worker thread integrates the $\dot{m}$ mass derivative across the entire proposed trajectory based on the initial BVP solution.
+   * It compares the total required propellant mass against the ship's current fuel tank capacity. If the required fuel exceeds available reserves, it returns a detailed "Insufficient Fuel" error to the UI (including the exact fuel deficit) and suggests alternative mission parameters—such as increasing the total Time of Flight to lower the required $\Delta V$.
+5. Dynamic Terminal Guidance Handoff
+The BVP solver must hand off control to the Terminal Proportional-Derivative (PD) controller as the time-to-go ($t_{go}$) approaches zero to prevent a mathematical singularity. However, hardcoding an absolute time threshold (e.g., switching at $t_{go} = 2.0$ days) is fundamentally incompatible with a game featuring varied orbital scales. A 2-day handoff works for an interplanetary Mars transit but breaks entirely if the player commands a 5-hour hop from a moon to a lower orbit around the same parent body (the ship would spawn directly into Terminal Mode, bypassing the optimal trajectory entirely).
+To ensure the autopilot functions universally across any star system, the game must use a Dynamic Multi-Condition Handoff. The transition to Terminal Guidance should only trigger when all of the following normalized criteria are met:
+5.1 The Distance Metric: Gravitational Dominance
+The ship must be deep enough into the target's gravity well that the Terminal PD Controller's synthetic thrust commands aren't fighting the central star's gravity.
+* Condition: The distance to the target must be less than a small multiple of the target's Sphere of Influence ($R_{SOI}$), or an arbitrary multiple of the target parking orbit radius ($R_{orbit}$).
+* Formula: $r_{err} < \min(0.25 \times R_{SOI}, 10 \times R_{orbit})$
+5.2 The Time Metric: Characteristic Orbital Scale
+Instead of absolute time, $t_{go}$ should be evaluated relative to the orbital mechanics of the destination. The time remaining should be roughly equivalent to a fraction of the orbital period of the target parking orbit ($T_{orbit}$). This ensures that short hops to fast orbits have rapid handoffs, while long transits to distant, slow orbits hand off earlier.
+* Condition: Time-to-go is less than a fraction of the target's orbital period, clamped by a fraction of the total flight time to prevent early triggering on short hops.
+* Formula: $t_{go} < \max\left(0.5 \times T_{orbit}, 0.05 \times t_{total}\right)$
+5.3 The Singularity Safety Net (Hard Floor)
+Regardless of the dynamic metrics, the game engine must enforce a hard minimum floor to prevent the BVP solver from hitting a divide-by-zero singularity during the next physics frame.
+* Condition: The time-to-go must never be smaller than $N$ physics ticks.
+* Formula: $t_{go} \le 10 \times \Delta t_{physics}$
+Implementation Logic:
+During the main simulation loop, the engine evaluates:
+IF (Distance Metric MET AND Time Metric MET) OR (Safety Net MET):
+   Disable Optimal BVP Solver
+   Engage Critically Damped Terminal PD Controller
+
+
+This combined approach guarantees that a ship traversing the solar system will gracefully hand off a few days out, while a ship executing a brief moon-to-planet hop will hold its optimal path until the final few minutes.

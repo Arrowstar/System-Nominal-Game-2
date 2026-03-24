@@ -340,13 +340,18 @@ export class TacticalHUD {
     switch (ap.state) {
       case 'ALIGN': stateColor = '#ffb000'; break;
       case 'ACCEL': stateColor = '#ff3333'; break;
+      case 'COAST': stateColor = '#00d4ff'; break;
       case 'BRAKE': stateColor = '#39ff14'; break;
       case 'HOLD':  stateColor = '#00ffff'; break;
     }
 
     this.apPanelContent.querySelector('#tac-ap-state').textContent = ap.state;
     this.apPanelContent.querySelector('#tac-ap-state').style.color = stateColor;
-    this.apPanelContent.querySelector('#tac-ap-target').textContent = ap.targetBody ? ap.targetBody.name.toUpperCase() : '';
+
+    const targetText = ap.targetBody ? ap.targetBody.name.toUpperCase() : '';
+    const effPct = Math.round(ap.efficiency * 100);
+    const effLabel = effPct > 50 ? `ECO ${effPct}%` : effPct > 0 ? `BAL ${effPct}%` : 'SPD';
+    this.apPanelContent.querySelector('#tac-ap-target').textContent = `${targetText}  ·  ${effLabel}`;
   }
 
   // ─── Weapon Selector (left side, below velocity) ──────────────────────────

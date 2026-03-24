@@ -1,0 +1,32 @@
+﻿
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mC:/Users/Adam/Dropbox/Documents/homework/Personal Projects/System Nominal Game[39m
+
+[90mstdout[2m | src/navigation/__tests__/autopilot.test.js[2m > [22m[2mAutopilotManager[2m > [22m[2mEfficiency & Coast phase[2m > [22m[2mACCEL transitions to COAST when closing rate exceeds target coast speed
+[22m[39mFailing Test State: COAST
+
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mGravity-aware braking[2m > [22mtransitions to BRAKE earlier when approaching a massive body[32m 2[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mGravity-aware braking[2m > [22mBRAKE_SAFETY factor is >= 1.15[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mOrbital insertion[2m > [22m_circularOrbitSpeed returns correct orbital velocity[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mOrbital insertion[2m > [22mreturns 0 for tiny bodies with negligible mass[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mOrbital insertion[2m > [22marrival distance scales with body radius[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mCollision avoidance[2m > [22mreturns null when no bodies are in the way[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mCollision avoidance[2m > [22msteers away when the sun is directly in the flight path[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mCollision avoidance[2m > [22msteers away when the sun is slightly off the flight path[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mCollision avoidance[2m > [22mdoes not avoid the target body itself[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mCollision avoidance[2m > [22mignores low-mass bodies[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mengage / disengage[2m > [22mengage sets state to ALIGN and stores target[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mengage / disengage[2m > [22mdisengage resets all state[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22msetEfficiency clamps to [0, 1] and defaults to 0[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mCOAST state is defined in AP_STATE[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mACCEL transitions to COAST when closing rate exceeds target coast speed[32m 1[2mms[22m[39m
+ [31m├ù[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mCOAST phase sets throttle to 0[32m 5[2mms[22m[39m
+[31m   ΓåÆ expected 1 to be +0 // Object.is equality[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mbraking phase uses non-zero throttle regardless of efficiency[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mat efficiency=0, no coast phase occurs[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m src/navigation/__tests__/autopilot.test.js[2m > [22mAutopilotManager[2m > [22mEfficiency & Coast phase[2m > [22mestimatedFuelCost is populated during active autopilot[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m18 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 21:05:58
+[2m   Duration [22m 196ms[2m (transform 33ms, setup 0ms, import 51ms, tests 12ms, environment 0ms)[22m
+

@@ -60,6 +60,11 @@ export class StationUI {
     // Wallet is managed via playerWallet
 
     this._activeTab = this.ship.loadout.hull.id === 'NO_SHIP' ? 'ships' : 'market';
+    
+    // Shipyard filters
+    this._shipyardCategory = 'ALL';
+    this._shipyardSubCategory = 'ALL';
+
     this._build();
   }
 
@@ -123,6 +128,26 @@ export class StationUI {
         }
         .component-card:hover { border-color: rgba(57,255,20,0.3); background: rgba(57,255,20,0.04); }
         .component-card.equipped { border-color: rgba(57,255,20,0.5); }
+
+        .shipyard-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+        .shipyard-filter-tab {
+          cursor: pointer; padding: 4px 12px; font-size: 10px; color: #8b949e;
+          border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02);
+          text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.15s;
+        }
+        .shipyard-filter-tab:hover { border-color: rgba(57,255,20,0.3); color: #39ff14; }
+        .shipyard-filter-tab.active {
+          background: rgba(57,255,20,0.1); border-color: #39ff14; color: #39ff14;
+          box-shadow: 0 0 8px rgba(57,255,20,0.2);
+        }
+
+        .sub-filter-bar { display: flex; gap: 6px; margin-bottom: 16px; padding-left: 12px; border-left: 2px solid rgba(57,255,20,0.2); }
+        .sub-filter-tab {
+          cursor: pointer; padding: 2px 8px; font-size: 9px; color: #484f58;
+          border: 1px solid transparent; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s;
+        }
+        .sub-filter-tab:hover { color: #8b949e; }
+        .sub-filter-tab.active { color: #39ff14; font-weight: 700; }
       `;
       document.head.appendChild(style);
     }
@@ -653,15 +678,74 @@ export class StationUI {
 
     // ── Right: available components ──
     const rightPanel = document.createElement('div');
-    rightPanel.style.cssText = `flex: 1; border: 1px solid rgba(255,255,255,0.06); padding: 20px;`;
+    rightPanel.style.cssText = `flex: 1; border: 1px solid rgba(255,255,255,0.06); padding: 20px; display: flex; flex-direction: column;`;
     rightPanel.innerHTML = `
       <div style="font-size: 12px; color: #ffbf00; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 16px;">AVAILABLE COMPONENTS</div>
     `;
 
+    const HIERARCHY = {
+      ALL: { label: 'ALL', subs: [] },
+      ENGINE: { label: 'ENGINES', subs: [] },
+      REACTOR: { label: 'REACTORS', subs: [] },
+      TANK: { label: 'TANKS', subs: [] },
+      WEAPON: { label: 'WEAPONS', subs: ['KINETIC', 'ENERGY', 'MISSILE'] }
+    };
+
+    // Main Filter Bar
+    const mainBar = document.createElement('div');
+    mainBar.className = 'shipyard-filter-bar';
+    Object.keys(HIERARCHY).forEach(catKey => {
+      const tab = document.createElement('div');
+      tab.className = `shipyard-filter-tab ${this._shipyardCategory === catKey ? 'active' : ''}`;
+      tab.textContent = HIERARCHY[catKey].label;
+      tab.onclick = () => {
+        this._shipyardCategory = catKey;
+        this._shipyardSubCategory = 'ALL';
+        this._renderTab();
+      };
+      mainBar.appendChild(tab);
+    });
+    rightPanel.appendChild(mainBar);
+
+    // Sub Filter Bar (if applicable)
+    const currentCat = HIERARCHY[this._shipyardCategory];
+    if (currentCat && currentCat.subs.length > 0) {
+      const subBar = document.createElement('div');
+      subBar.className = 'sub-filter-bar';
+      
+      const allSub = document.createElement('div');
+      allSub.className = `sub-filter-tab ${this._shipyardSubCategory === 'ALL' ? 'active' : ''}`;
+      allSub.textContent = 'ALL TYPES';
+      allSub.onclick = () => {
+        this._shipyardSubCategory = 'ALL';
+        this._renderTab();
+      };
+      subBar.appendChild(allSub);
+
+      currentCat.subs.forEach(sKey => {
+        const subTab = document.createElement('div');
+        subTab.className = `sub-filter-tab ${this._shipyardSubCategory === sKey ? 'active' : ''}`;
+        subTab.textContent = sKey;
+        subTab.onclick = () => {
+          this._shipyardSubCategory = sKey;
+          this._renderTab();
+        };
+        subBar.appendChild(subTab);
+      });
+      rightPanel.appendChild(subBar);
+    }
+
     // List all components in catalog
     const compList = document.createElement('div');
-    compList.style.cssText = `display: flex; flex-direction: column; gap: 6px; max-height: 500px; overflow-y: auto;`;
+    compList.style.cssText = `display: flex; flex-direction: column; gap: 6px; max-height: 500px; overflow-y: auto; flex: 1;`;
+    
     for (const [id, comp] of Object.entries(COMPONENTS)) {
+      // ── Apply Filters ──
+      const typeMatch = this._shipyardCategory === 'ALL' || comp.type.toUpperCase() === this._shipyardCategory;
+      const subMatch = this._shipyardSubCategory === 'ALL' || (comp.category && comp.category.toUpperCase() === this._shipyardSubCategory);
+      
+      if (!typeMatch || !subMatch) continue;
+
       const card = document.createElement('div');
       const costAmount = comp.cost || 0;
       card.className = 'component-card';
@@ -679,13 +763,13 @@ export class StationUI {
           ${comp.fuelCap ? `<span>FUEL: ${(comp.fuelCap / 1000).toFixed(0)}t cap` : ''}
           ${comp.powerGen ? `<span>POWER: ${comp.powerGen} MW</span>` : ''}
           ${comp.type === 'Weapon' ? `
-            <span style="color:#ff6b6b">DMG: ${comp.damage}</span>
+            <span style="color:#ff6b6b">${(comp.category || 'kinetic').toUpperCase()}</span>
+            <span style="color:#ff6767">DMG: ${comp.damage}</span>
             <span>ROF: ${(1 / comp.coolingTime).toFixed(1)}/s</span>
             <span>RNG: ${comp.range >= 1e6 ? (comp.range / 1e6).toFixed(0) + 'Mm' : (comp.range / 1e3).toFixed(0) + 'km'}</span>
             ${comp.proxRadius > 0 ? `<span>PROX: ${comp.proxRadius}m</span>` : ''}
             ${comp.guided ? '<span style="color:#00d4ff">GUIDED</span>' : ''}
             ${comp.turret ? '<span style="color:#00d4ff">TURRET</span>' : ''}
-            ${comp.category === 'energy' ? '<span style="color:#ffbf00">ENERGY</span>' : ''}
           ` : ''}
           <span style="color: #ffbf00; margin-left: auto;">${costAmount > 0 ? costAmount.toLocaleString() + ' CR' : 'FREE'}</span>
         </div>

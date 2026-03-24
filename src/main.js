@@ -246,7 +246,7 @@ function buildMainMenu() {
 
   // Hook up buttons (will dispatch state transitions later once Nav is implemented)
   document.getElementById('btn-new-game').addEventListener('click', () => {
-    docking.dockTarget = solarSystem.allBodies.find(b => b.name === 'Aethelgard');
+    docking.dockTarget = solarSystem.allBodies.find(b => b.name === 'Vane');
     states.transition(STATES.DOCKED);
   });
   document.getElementById('btn-how-to').addEventListener('click', () => {
@@ -718,6 +718,11 @@ states.register(STATES.DOCKED, {
           playerShip.velocity.x = bVel.x;
           playerShip.velocity.y = bVel.y + v_c;
           playerShip.heading = Math.PI / 2; // Face prograde
+          
+          // Zoom in for the first launch to see the initial orbit
+          camera._pos = playerShip.position.clone();
+          camera._zoom = 2e-7; // Closer zoom to see orbit around Vane
+          camera._hasBeenNavInitialized = true;
           
           states.transition(STATES.NAV);
           return;
