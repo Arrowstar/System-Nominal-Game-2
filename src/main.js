@@ -445,7 +445,7 @@ states.register(STATES.NAV, {
     economy.update(dt, simTime, npcShips);
     docking.update(playerShip, simTime);
     camera.update(dt);
-    navComp.handleInput(simTime, npcShips);
+    navComp.handleInput(simTime, npcShips, autopilot);
     navComp.update(simTime, dt);
     // ── Ship controls work in NAV too ───────────────────────────────────────
     if (input.consumePressed('KeyC')) {

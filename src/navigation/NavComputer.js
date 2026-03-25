@@ -95,7 +95,7 @@ export class NavComputer {
     this._drawOrbitalTrails(simTime);
     this._drawBodies(simTime);
     this._drawPlayerOrbit(simTime);
-    this._drawGhostPath(autopilot);
+    this._drawGhostPath(simTime, autopilot);
     this._drawShip(alpha);
     this._drawNpcs(alpha, npcShips);
     this._drawNodes(simTime);
@@ -149,7 +149,7 @@ export class NavComputer {
     this.nodes = this.nodes.filter(n => n.burnTime >= simTime);
   }
 
-  handleInput(simTime, npcShips = []) {
+  handleInput(simTime, npcShips = [], autopilot = null) {
     const input = this.input;
 
     if (this.widget.handleInput(this.input, this.trajectory)) {
@@ -174,7 +174,7 @@ export class NavComputer {
     if (hadClick && !clickConsumedByBody) {
       // Re-inject the click for ghost path handling by temporarily re-marking it pressed.
       // We do this by calling ghost-path logic directly with the known position.
-      this._checkGhostPathClickDirect(simTime);
+      this._checkGhostPathClickDirect(simTime, autopilot);
     }
 
     // ── Pan with left-button drag ──────────────────────────────────────────
@@ -731,7 +731,7 @@ export class NavComputer {
 
   // ─── Ghost Path ───────────────────────────────────────────────────────────────
 
-  _drawGhostPath(autopilot) {
+  _drawGhostPath(simTime, autopilot) {
     let pts = this.trajectory.points;
     let ptsLen = this.trajectory.pointsLength || pts.length;
 
@@ -774,17 +774,29 @@ export class NavComputer {
         'OPTIMAL': '#ffb000' // Yellow-orange guidance
       };
 
-      let currentPathState = pts[0].apState;
-      ctx.strokeStyle = stateColors[currentPathState] || '#ffbf00';
-      ctx.beginPath();
+      let currentPathState = 'OFF';
+      let started = false;
       
       const sShip = this.camera.worldToScreen(this.ship.position.x, this.ship.position.y);
-      ctx.moveTo(sShip.x, sShip.y);
 
       for (let i = 0; i < ptsLen; i++) {
         const pt = pts[i];
+        
+        // Skip points in the past to avoid "backwards" lines from current ship position
+        if (pt.t < simTime) continue;
+
         const p = this.camera.worldToScreen(pt.pos.x, pt.pos.y);
         
+        if (!started) {
+          ctx.beginPath();
+          ctx.moveTo(sShip.x, sShip.y);
+          ctx.lineTo(p.x, p.y);
+          currentPathState = pt.apState || 'OPTIMAL';
+          ctx.strokeStyle = stateColors[currentPathState] || '#ffbf00';
+          started = true;
+          continue;
+        }
+
         if (pt.apState !== currentPathState) {
           // Finish the current path segment and start a new one
           ctx.lineTo(p.x, p.y);
@@ -798,7 +810,7 @@ export class NavComputer {
           ctx.lineTo(p.x, p.y);
         }
       }
-      ctx.stroke();
+      if (started) ctx.stroke();
     }
 
     // Hover Highlight
@@ -831,10 +843,12 @@ export class NavComputer {
 
   // ─── Maneuver Nodes ──────────────────────────────────────────────────────────
 
-  _checkGhostPathClick(simTime) {
+  _checkGhostPathClick(simTime, autopilot = null) {
     // Handle trajectory clicking or 'N' key
     const isNKey = this.input.consumePressed('KeyN');
     if ((this.input.consumePressed('MouseLeft') || isNKey) && !this.input.isDown('Space')) {
+      // Disable node creation if autopilot is on
+      if (autopilot && autopilot.active) return false;
       const mousePos = this.input.mouse;
       const pts = this.trajectory.points;
 
@@ -890,9 +904,12 @@ export class NavComputer {
    * Ghost-path node placement triggered by a click that was NOT on a body.
    * Does not call consumePressed (the click was already consumed by handleInput).
    */
-  _checkGhostPathClickDirect(simTime) {
+  _checkGhostPathClickDirect(simTime, autopilot = null) {
     const isNKey = this.input.consumePressed('KeyN');
     if (this.input.isDown('Space') && !isNKey) return false;
+
+    // Disable node creation if autopilot is on
+    if (autopilot && autopilot.active) return false;
 
     const mousePos = this.input.mouse;
     const pts = this.trajectory.points;

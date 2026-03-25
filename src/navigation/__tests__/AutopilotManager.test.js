@@ -99,14 +99,14 @@ describe('AutopilotManager Dynamic Handoff', () => {
         ap.execute();
         expect(ap.state).toBe(AP_STATE.OPTIMAL);
         
-        // 2. Close enough (dist < rHandoff) but still high tGo? 
-        const simTimeNear = ap.flightTime - 86400; // 1 day out (within tHandoff ~5 days)
-        ship.position = new Vec2(1.5e11 + 2e8, 0); // Still slightly outside rHandoff (~1.28e8)
-        ap.update(ship, 1, simTimeNear);
-        expect(ap.state).toBe(AP_STATE.OPTIMAL);
-        
-        // 3. Within BOTH
+        // 2. Close enough (dist < rHandoff) but still high tGo (1 day)? 
+        const simTimeFar = ap.flightTime - 86400; // 1 day out
         ship.position = new Vec2(1.5e11 + 1e8, 0); // Inside rHandoff
+        ap.update(ship, 1, simTimeFar);
+        expect(ap.state).toBe(AP_STATE.OPTIMAL); // Should stay OPTIMAL because 1 day > 1 hour
+        
+        // 3. Within BOTH (Now 1800s out)
+        const simTimeNear = ap.flightTime - 1800; // 30 mins out
         ap.update(ship, 1, simTimeNear);
         expect(ap.state).toBe(AP_STATE.TERMINAL);
     });

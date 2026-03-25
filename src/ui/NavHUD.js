@@ -634,6 +634,38 @@ export class NavHUD {
         <span style="color:#8b949e;">ΔV REQ</span>
         <span id="ap-dv" style="font-weight:600;">—</span>
       </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;">
+        <span style="color:#8b949e;">THRUST</span>
+        <span id="ap-thrust" style="color:#fff;font-weight:600;">0.00 m/s²</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;">
+        <span style="color:#8b949e;">THROTTLE</span>
+        <span id="ap-throttle" style="color:#fff;font-weight:600;">0%</span>
+      </div>
+      
+      <!-- BVP Specifics -->
+      <div id="ap-bvp-debug" style="border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;margin-top:4px;display:none;flex-direction:column;gap:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+           <span style="color:#8b949e;">SOLVER ITERS</span>
+           <span id="ap-iters" style="color:#ffbf00;">0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+           <span style="color:#8b949e;">MISS ERROR</span>
+           <span id="ap-error" style="color:#39ff14;">0.0 km</span>
+        </div>
+      </div>
+
+      <!-- Terminal Specifics -->
+      <div id="ap-term-debug" style="border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;margin-top:4px;display:none;flex-direction:column;gap:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+           <span style="color:#8b949e;">ENERGY ERROR</span>
+           <span id="ap-pos-err" style="color:#ffbf00;">0.0 MJ/kg</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+           <span style="color:#8b949e;">ECCENTRICITY</span>
+           <span id="ap-vel-err" style="color:#39ff14;">0.0000</span>
+        </div>
+      </div>
       <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;margin-top:4px;">
         <div style="display:flex;justify-content:space-between;font-size:9px;letter-spacing:0.08em;margin-bottom:4px;">
           <span style="color:#ff3333;">SPEED</span>
@@ -655,6 +687,27 @@ export class NavHUD {
           <span id="ap-fuel-est" style="color:#00d4ff;font-weight:600;">—</span>
         </div>
       </div>
+
+      <!-- Handoff Progression -->
+      <div id="ap-handoff-container" style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;margin-top:4px;display:none;flex-direction:column;gap:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;letter-spacing:0.05em;">
+          <span style="color:#8b949e;">HANDOFF PROGRESS</span>
+          <span id="ap-handoff-pct" style="color:#00d4ff;">0%</span>
+        </div>
+        <div id="ap-term-eta-row" style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+          <span style="color:#8b949e;">T-TERMINAL</span>
+          <span id="ap-term-eta" style="color:#fff;">—</span>
+        </div>
+        <div style="width:100%; height:4px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden;">
+          <div id="ap-handoff-bar" style="width:0%; height:100%; background:#00d4ff; transition:width 0.3s ease;"></div>
+        </div>
+        <button id="ap-terminal-btn" class="btn interactive" style="
+          margin-top: 4px; width: 100%; padding: 4px; background: rgba(0, 212, 255, 0.1);
+          border: 1px solid #00d4ff; color: #00d4ff; font-size: 10px; font-weight: 600; cursor: pointer;
+          text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.5; pointer-events: none;
+        ">Force Terminal</button>
+      </div>
+
       <button id="ap-toggle-btn" class="btn interactive" style="
         margin-top: 8px; width: 100%; padding: 10px; background: rgba(57,255,20,0.1);
         border: 1px solid #39ff14; color: #39ff14; font-weight: 700; cursor: pointer;
@@ -679,6 +732,11 @@ export class NavHUD {
         } else {
             this.autopilot.execute();
         }
+    };
+    
+    const terminalBtn = this.apPanelContent.querySelector('#ap-terminal-btn');
+    terminalBtn.onclick = () => {
+        if (this.autopilot) this.autopilot.forceTerminal();
     };
     // Prevent keyboard events on slider from propagating to game controls
     slider.addEventListener('keydown', (e) => e.stopPropagation());
@@ -721,6 +779,8 @@ export class NavHUD {
       case 'COAST': stateColor = '#00d4ff'; break;
       case 'BRAKE': stateColor = '#39ff14'; break;
       case 'HOLD':  stateColor = '#00ffff'; break;
+      case 'OPTIMAL': stateColor = '#ffbf00'; break;
+      case 'TERMINAL': stateColor = '#39ff14'; break;
     }
 
     this.apPanelContent.querySelector('#ap-state').textContent = ap.state;
@@ -728,6 +788,32 @@ export class NavHUD {
     this.apPanelContent.querySelector('#ap-target').textContent = targetName;
     this.apPanelContent.querySelector('#ap-eta').textContent = formatTime(ap.eta);
     this.apPanelContent.querySelector('#ap-dv').textContent = (ap.dvRemaining).toFixed(1) + ' m/s';
+    
+    // Debug Telemetry
+    const apThrustStr = `${ap.currentAccel.toFixed(2)} / ${ap.requestedAccel.toFixed(2)} m/s²`;
+    this.apPanelContent.querySelector('#ap-thrust').textContent = apThrustStr;
+    this.apPanelContent.querySelector('#ap-throttle').textContent = `${Math.round(ap.currentThrottle * 100)}%`;
+
+    const bvpDebug = this.apPanelContent.querySelector('#ap-bvp-debug');
+    const termDebug = this.apPanelContent.querySelector('#ap-term-debug');
+
+    if (ap.state === 'OPTIMAL' || ap.state === 'STANDBY') {
+        bvpDebug.style.display = 'flex';
+        termDebug.style.display = 'none';
+        this.apPanelContent.querySelector('#ap-iters').textContent = ap.iterations;
+        this.apPanelContent.querySelector('#ap-error').textContent = this._formatDist(ap.error);
+    } else if (ap.state === 'TERMINAL') {
+        bvpDebug.style.display = 'none';
+        termDebug.style.display = 'flex';
+        // Display Energy Error in MJ/kg (ap.posError is J/kg)
+        const energyMJ = (ap.posError / 1e6).toFixed(3);
+        this.apPanelContent.querySelector('#ap-pos-err').textContent = `${energyMJ} MJ/kg`;
+        // Display Eccentricity (dimensionless)
+        this.apPanelContent.querySelector('#ap-vel-err').textContent = ap.velError.toFixed(5);
+    } else {
+        bvpDebug.style.display = 'none';
+        termDebug.style.display = 'none';
+    }
 
     // Update efficiency slider and fuel estimate
     const slider = this.apPanelContent.querySelector('#ap-eff-slider');
@@ -753,6 +839,45 @@ export class NavHUD {
     if (fuelRem > 1000) remStr = `${(fuelRem / 1000).toFixed(1)}t`;
     else remStr = `${Math.round(fuelRem)} kg`;
     this.apPanelContent.querySelector('#ap-fuel-res').textContent = `${remStr} (${fuelPct.toFixed(0)}%)`;
+
+    // Handoff Progress UI
+    const handoffContainer = this.apPanelContent.querySelector('#ap-handoff-container');
+    const termBtn = this.apPanelContent.querySelector('#ap-terminal-btn');
+    const handoffPct = this.apPanelContent.querySelector('#ap-handoff-pct');
+    const handoffBar = this.apPanelContent.querySelector('#ap-handoff-bar');
+
+    if (ap.state === 'OPTIMAL' || ap.state === 'STANDBY') {
+        handoffContainer.style.display = 'flex';
+        
+        if (ap.handoffProgress > 0) {
+            const pct = Math.round(ap.handoffProgress * 100);
+            handoffPct.textContent = `${pct}%`;
+            handoffBar.style.width = `${pct}%`;
+            handoffBar.style.background = '#00d4ff';
+            
+            if (ap.handoffProgress > 0.1) {
+                termBtn.style.opacity = '1.0';
+                termBtn.style.pointerEvents = 'all';
+                termBtn.textContent = 'Force Terminal';
+            } else {
+                termBtn.style.opacity = '0.5';
+                termBtn.style.pointerEvents = 'none';
+                termBtn.textContent = 'Approaching Handoff...';
+            }
+        } else {
+            // Far away: Show "Wait" or "Solving"
+            handoffPct.textContent = 'LONG RANGE';
+            handoffBar.style.width = '0%';
+            termBtn.style.opacity = '0.3';
+            termBtn.style.pointerEvents = 'none';
+            termBtn.textContent = 'Locked (Long Range)';
+        }
+
+        // Always update terminal ETA
+        this.apPanelContent.querySelector('#ap-term-eta').textContent = formatTime(ap.timeToTerminal);
+    } else {
+        handoffContainer.style.display = 'none';
+    }
 
     // Toggle Button State
     const toggleBtn = this.apPanelContent.querySelector('#ap-toggle-btn');

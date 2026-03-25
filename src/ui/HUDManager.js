@@ -55,6 +55,7 @@ export class HUDManager {
       'top-center': 'top: 24px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center;',
       'middle-left': 'top: 50%; left: 24px; transform: translateY(-50%); flex-direction: column; align-items: flex-start;',
       'bottom-left': 'bottom: 24px; left: 24px; flex-direction: column-reverse; align-items: flex-start;',
+      'bottom-center': 'bottom: 24px; left: 50%; transform: translateX(-50%); flex-direction: column-reverse; align-items: center;',
       'top-right': 'top: 24px; right: 24px; flex-direction: column; align-items: flex-end;',
       'middle-right': 'top: 50%; right: 24px; transform: translateY(-50%); flex-direction: column; align-items: flex-end;',
       'bottom-right': 'bottom: 24px; right: 24px; flex-direction: column-reverse; align-items: flex-end;',

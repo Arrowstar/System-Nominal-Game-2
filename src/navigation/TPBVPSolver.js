@@ -5,7 +5,7 @@ import { CanonicalUnits } from './CanonicalUnits.js';
 const G_SI = 6.674e-11;
 const G0 = 9.80665;
 const SOFTENING_SI = 1e6; // Softening parameter (m^2)
-const STEPS = 40; // Resolution for integration
+const DEFAULT_STEPS = 100; // Resolution for integration
 
 /**
  * Two-Point Boundary Value Problem Solver for continuous thrust trajectories.
@@ -23,13 +23,13 @@ export class TPBVPSolver {
      * Precompute positions of all gravity bodies for the duration of the flight.
      * RK4 requires positions at t, t + 0.5dt, and t + dt.
      */
-    precomputeTrajectories(tStart, tEnd, units) {
+    precomputeTrajectories(tStart, tEnd, units, steps) {
         const flightTime = tEnd - tStart;
-        const dt = flightTime / STEPS;
+        const dt = flightTime / steps;
         const halfDt = dt / 2;
         
         const cache = [];
-        const numPoints = STEPS * 2 + 1;
+        const numPoints = steps * 2 + 1;
         
         for (let i = 0; i < numPoints; i++) {
             const t_canonical = tStart + i * halfDt;
@@ -58,7 +58,7 @@ export class TPBVPSolver {
      * @param {number[]} guess      (Optional) Initial guess for costates [lrx, lry, lvx, lvy] (SI units).
      * @returns {object}            { costates: number[], error: number, converged: boolean, path: object[] } (SI units)
      */
-    solve(ship, targetBody, tStart, tArrival, guess = null) {
+    solve(ship, targetBody, tStart, tArrival, guess = null, maxItersOverride = null, steps = DEFAULT_STEPS) {
         const flightTime_SI = tArrival - tStart;
         if (flightTime_SI <= 0) return { costates: [0,0,0,0], error: 0, converged: false, path: [] };
 
@@ -95,24 +95,26 @@ export class TPBVPSolver {
         let currentCostates_c = guess ? units.toCostates(guess) : this.getKinematicGuess(state0_c, targetState_c, flightTime_c);
         
         // Precompute gravity field in canonical units
-        const bodyCache = this.precomputeTrajectories(tStart_c, tArrival_c, units);
+        const bodyCache = this.precomputeTrajectories(tStart_c, tArrival_c, units, steps);
 
         // Newton-Raphson Loop
         let errMag_c = Infinity;
         const tolerance_c = units.toPos(10000); // 10 km expressed in DU
-        const maxIters = guess ? 5 : 15;
+        const maxIters = maxItersOverride || (guess ? 10 : 50);
         const epsilon_c = 1e-4;   // Dim-less perturbation
         
         let path_c = [];
         let finalState_c = state0_c;
+        let iterCount = 0;
 
         const maxThrust_SI = ship.thrust;
         const acc_c = units.toAcc(maxThrust_SI / ship.totalMass);
         const isp_SI = ship.isp;
 
         for (let iter = 0; iter < maxIters; iter++) {
+            iterCount++;
             // 1. Integrate nominal trajectory
-            const res = this.integrate(state0_c, currentCostates_c, tStart_c, tArrival_c, maxThrust_SI, isp_SI, units, bodyCache);
+            const res = this.integrate(state0_c, currentCostates_c, tStart_c, tArrival_c, maxThrust_SI, isp_SI, units, bodyCache, steps);
             finalState_c = res.finalState;
             path_c = res.history;
 
@@ -133,7 +135,7 @@ export class TPBVPSolver {
                 const pertCostates_c = [...currentCostates_c];
                 pertCostates_c[j] += epsilon_c;
                 
-                const { finalState: pertState_c } = this.integrate(state0_c, pertCostates_c, tStart_c, tArrival_c, maxThrust_SI, isp_SI, units, bodyCache);
+                const { finalState: pertState_c } = this.integrate(state0_c, pertCostates_c, tStart_c, tArrival_c, maxThrust_SI, isp_SI, units, bodyCache, steps);
                 
                 const pertError_c = [
                     pertState_c[0] - targetState_c[0],
@@ -166,6 +168,7 @@ export class TPBVPSolver {
             costates: units.fromCostates(currentCostates_c), 
             error: units.fromPos(errMag_c), 
             converged: errMag_c < tolerance_c, 
+            iterations: iterCount,
             path: path_c.map(p => ({
                 t: units.fromTime(p.t),
                 pos: new Vec2(units.fromPos(p.pos.x), units.fromPos(p.pos.y)),
@@ -176,20 +179,19 @@ export class TPBVPSolver {
         };
     }
 
-    integrate(state0_c, costates0_c, tStart_c, tEnd_c, maxThrust_SI, isp_SI, units, bodyCache) {
+    integrate(state0_c, costates0_c, tStart_c, tEnd_c, maxThrust_SI, isp_SI, units, bodyCache, steps) {
         const flightTime_c = tEnd_c - tStart_c;
-        const dt_c = flightTime_c / STEPS;
+        const dt_c = flightTime_c / steps;
         
         let currentState_c = [...state0_c, ...costates0_c]; 
         let t_c = tStart_c;
         const history = [];
 
-        // Pre-calculate constants for derivative function
-        const softening_c = units.toPos(units.toPos(SOFTENING_SI)); // softening is r^2 => DU^2
+        // Pre-calculate constants for derivative function (softening no longer used)
         
-        const derivFn = (time_c, s_c) => this.computeDerivatives(time_c, s_c, maxThrust_SI, isp_SI, units, softening_c, bodyCache, tStart_c, dt_c);
+        const derivFn = (time_c, s_c) => this.computeDerivatives(time_c, s_c, maxThrust_SI, isp_SI, units, bodyCache, tStart_c, dt_c);
 
-        for (let i = 0; i < STEPS; i++) {
+        for (let i = 0; i < steps; i++) {
             history.push({ 
                 t: t_c, 
                 pos: new Vec2(currentState_c[0], currentState_c[1]), 
@@ -202,7 +204,7 @@ export class TPBVPSolver {
         return { finalState: currentState_c, history };
     }
 
-    computeDerivatives(t_c, state_c, maxThrust_SI, isp_SI, units, softening_c, bodyCache, tStart_c, dt_c) {
+    computeDerivatives(t_c, state_c, maxThrust_SI, isp_SI, units, bodyCache, tStart_c, dt_c) {
         const x = state_c[0], y = state_c[1];
         const vx = state_c[2], vy = state_c[3];
         const m = state_c[4];
@@ -248,7 +250,13 @@ export class TPBVPSolver {
 
             const dx = x - bx;
             const dy = y - by;
-            const r2 = dx*dx + dy*dy + softening_c;
+            const r2 = dx*dx + dy*dy;
+
+            // Match ShipSim skip radius logic (radius + 1km)
+            const skipR_SI = Math.max(body.radius || 0, 1000);
+            const skipR_c = units.toPos(skipR_SI);
+            if (r2 < (skipR_c * skipR_c)) continue;
+
             const r = Math.sqrt(r2);
             const r3 = r2 * r;    
             const r5 = r3 * r2;   
